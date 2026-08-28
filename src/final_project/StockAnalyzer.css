@@ -232,7 +232,15 @@
 /* ============================================================
    SECONDARY PAGES (Why Invest / Graham's Analysis / Profile / News)
 ============================================================ */
-.page2 { padding: 28px 32px; }
+.page2 { 
+  width: 94%;
+  max-width: 1000px;
+  margin-left: auto;
+  margin-right: auto;
+  display: block;
+  padding: 28px 0;
+  box-sizing: border-box;
+}
 h1 {
   color: white;
 }
@@ -241,12 +249,14 @@ h1 {
   font-size: clamp(20px, 3.5vw, 24px); /* Fluid typography */
   color: white;
   font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+  text-align: center;
 }
 .page-sub {
   color: var(--text-muted);
   font-size: 13px;
-  margin: 6px 0 22px;
+  margin: 6px auto 22px auto;
   max-width: 640px;
+  text-align: center;
 }
 
 .points-grid {
