@@ -7,7 +7,7 @@ The Benjamin Graham Stock Analyzer is a React-based web applicaiton designed to 
 <h3> 🚀 <u> Technologies Used </u></h3>
 
 Frontend: React (Hooks: useState, useMemo, useState)
-
+ 
 Styling: CSS / Modern Flexbox & Grid
 
 State Management: React component state & native set objects for watchlists
