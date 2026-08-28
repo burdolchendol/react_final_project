@@ -51,6 +51,6 @@ Navigate to http://localhost:5173 (or the port you specified in your terminal)
 | <div align="center"> <img src="./pictures/Homepage.png" width="800"><br><h3><strong>Home Page</strong></h3></div> | <div align="center"> <img src="./pictures/WhyInvestPage.png" width="800"><br><h3><strong>Why do we invest?</strong></h3></div> |
 | :---: | :---: |
 | <div align="center"> <img src="./pictures/GrahamAnalysis.png" width="800"><br><h3><strong>Graham's Analysis</strong></h3></div> | <div align="center"> <img src="./pictures/ScrollButtonTop.png" width="800"><br><h3><strong>Showcasing the scroll to top button</strong></h3></div> |
-| <div align="center"> <img src="./Pictures/GrahamProfile.png" width="800"><br><h3><strong>Graham's Profile</strong></h3></div> | <div align="center"> <img src="./Pictures/UserProfile.png" width="800"><br><h3><strong>User's profile</strong></h3></div> |
-| <div align="center"> <img src="./Pictures/NewsFeed.png" width="800"><br><h3><strong>News Feed</strong></h3></div> | <div align="center"> <img src="./Pictures/ContactUs.png" width="800"><br><h3><strong>Contact Us</strong></h3></div> |
-| <div align="center"> <img src="./Pictures/error404.png" width="800"><br><h3><strong>Error page</strong></h3></div> 
+| <div align="center"> <img src="./pictures/GrahamProfile.png" width="800"><br><h3><strong>Graham's Profile</strong></h3></div> | <div align="center"> <img src="./pictures/UserProfile.png" width="800"><br><h3><strong>User's profile</strong></h3></div> |
+| <div align="center"> <img src="./pictures/NewsFeed.png" width="800"><br><h3><strong>News Feed</strong></h3></div> | <div align="center"> <img src="./pictures/ContactUs.png" width="800"><br><h3><strong>Contact Us</strong></h3></div> |
+| <div align="center"> <img src="./pictures/error404.png" width="800"><br><h3><strong>Error page</strong></h3></div> 
