@@ -1,0 +1,54 @@
+name: Refresh market data
+
+# Downloads free company financials (SEC EDGAR) and prices (Yahoo / Stooq),
+# commits the snapshot under public/data/, and redeploys GitHub Pages.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+      - name: Fetch US market snapshot
+        env:
+          # Optional repo variable: SEC asks for "Name contact@email" here.
+          SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
+        run: npm run fetch:us
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --cached --quiet; then
+            echo "No data changes"
+          else
+            git commit -m "Refresh market data snapshot"
+            git push
+          fi
+
+      - name: Deploy to GitHub Pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run build
+          npx gh-pages -d dist \
+            -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git" \
+            -u "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"

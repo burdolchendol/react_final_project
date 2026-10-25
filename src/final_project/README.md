@@ -37,6 +37,36 @@ npm run dev
 Navigate to http://localhost:5173 (or the port you specified in your terminal)
 
 
+<h3> 📊 <u> Fundamentals Screener (real data) </u></h3>
+
+The **Screener** page scores real US companies against your own rules, using free data only:
+
+| What | Source | Key needed? |
+| --- | --- | --- |
+| Annual financials (revenue, EPS, balance sheet, cash flow, dividends) | [SEC EDGAR XBRL API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) | No |
+| Daily closing prices (5 years) | Yahoo Finance chart endpoint, with Stooq as a fallback | No |
+
+GitHub Pages can't call these APIs from the browser (no CORS, and SEC needs a User-Agent header), so the app reads a
+**static snapshot** in `public/data/<market>/`. The *Refresh market data* GitHub Action rebuilds it every Monday
+(or on demand from the Actions tab), commits it, and redeploys the site.
+
+```bash
+npm run fetch:us                                            # refresh every ticker in scripts/markets/us.tickers.json
+node scripts/fetch-data.mjs --market us --tickers AAPL,KO   # quick test with a few tickers (overwrites the index)
+npm test                                                    # unit tests for parsers, metrics and rules
+```
+
+- **Pick tickers:** edit `scripts/markets/us.tickers.json`. US filers of 10-K reports only (no ADRs, and dual-class
+  quirks like BRK-B make per-share ratios misleading).
+- **SEC contact:** set a repository variable `SEC_USER_AGENT` such as `Your Name you@example.com`; SEC asks every client to identify itself.
+- **Your rules:** the *My Rules* page starts with Graham's seven defensive-investor tests. Change thresholds, switch rules on or
+  off, or add rules on any metric. They are saved in your browser.
+
+**Data layer.** Each market is registered in `scripts/markets/index.mjs` with a fundamentals provider and a list of price
+sources. Every provider returns the same shape (`fiscalYears: [{ fiscalYear, periodEnd, revenue, netIncome, epsDiluted, … }]`),
+so the app does not care where the numbers came from. Adding Singapore means writing an SGX fundamentals provider
+(prices already work through Yahoo with `.SI` tickers) and enabling the market in `src/final_project/data/markets.js`.
+
 <h3> 🌐 <u> Live Demo </u></h3>
 
 🚀 Check out the live deployment of the application here 🚀:
