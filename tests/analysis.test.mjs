@@ -68,3 +68,12 @@ test("default Graham rules pass for the steady company", () => {
   assert.deepEqual(failed, []);
   assert.equal(verdict.total, DEFAULT_RULES.filter((r) => r.enabled).length);
 });
+
+test("secFilingUrl builds the EDGAR filing index link", async () => {
+  const { secFilingUrl } = await import("../src/final_project/utils/sources.js");
+  assert.equal(
+    secFilingUrl("0000320193", "0000320193-24-000123"),
+    "https://www.sec.gov/Archives/edgar/data/320193/000032019324000123/0000320193-24-000123-index.htm"
+  );
+  assert.equal(secFilingUrl(null, "x"), null);
+});

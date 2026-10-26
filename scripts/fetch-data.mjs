@@ -41,11 +41,12 @@ async function snapshotCompany(marketId, market, ticker) {
     summary: {
       market: marketId,
       ticker,
+      cik: fundamentals.cik ?? null,
       name: fundamentals.name,
       sector: fundamentals.sector,
       exchange: fundamentals.exchange,
       currency: priceSummary.currency || market.currency,
-      price: prices ? priceSummary : null,
+      price: prices ? { ...priceSummary, source: priceSource } : null,
       priceError,
       fiscalYears: fundamentals.fiscalYears,
       sources: [fundamentals.source, priceSource].filter(Boolean),

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeCompanyFacts } from "../scripts/providers/secEdgar.mjs";
 
-const fy = (start, end, val, filed, form = "10-K") => ({ start, end, val, filed, form, fp: "FY" });
+const fy = (start, end, val, filed, form = "10-K") => ({ start, end, val, filed, form, fp: "FY", accn: `accn-${filed}` });
 const inst = (end, val, filed, form = "10-K") => ({ end, val, filed, form, fp: "FY" });
 
 const facts = {
@@ -46,6 +46,14 @@ test("normalizeCompanyFacts merges tags, keeps annual 10-K values and latest res
   assert.equal(years[1].netIncome, 12);
   assert.equal(years[2].epsDiluted, 1.3);
   assert.equal(years[0].epsDiluted, null);
+});
+
+test("normalizeCompanyFacts records the filing each value came from", () => {
+  const years = normalizeCompanyFacts(facts);
+  // The restated 2017 net income comes from the 2019 filing.
+  assert.equal(years[1].accn.netIncome, "accn-2019-02-01");
+  assert.equal(years[1].accn.revenue, "accn-2018-02-01");
+  assert.equal(years[0].accn.epsDiluted, undefined);
 });
 
 test("normalizeCompanyFacts derives total liabilities when not reported", () => {

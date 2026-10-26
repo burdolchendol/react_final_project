@@ -84,7 +84,7 @@ function annualFacts(entries, kind) {
       if (days < 340 || days > 390) continue;
     }
     const prev = byEnd.get(e.end);
-    if (!prev || e.filed > prev.filed) byEnd.set(e.end, { val: e.val, filed: e.filed, form: e.form });
+    if (!prev || e.filed > prev.filed) byEnd.set(e.end, { val: e.val, filed: e.filed, form: e.form, accn: e.accn });
   }
   return byEnd;
 }
@@ -116,9 +116,12 @@ export function normalizeCompanyFacts(companyFacts) {
   return periodEnds.map((periodEnd) => {
     const row = { fiscalYear: Number(periodEnd.slice(0, 4)), periodEnd };
     let filed = null;
+    // Accession number of the filing each value came from, so the app can link to it.
+    const accn = {};
     for (const field of Object.keys(FIELD_CONCEPTS)) {
       const fact = series[field].get(periodEnd);
       row[field] = fact ? fact.val : null;
+      if (fact?.accn) accn[field] = fact.accn;
       if (fact && (!filed || fact.filed > filed)) filed = fact.filed;
     }
     // Some filers omit total liabilities; derive it when the parts exist.
@@ -127,6 +130,7 @@ export function normalizeCompanyFacts(companyFacts) {
       row.totalLiabilitiesDerived = true;
     }
     row.filed = filed;
+    row.accn = accn;
     return row;
   });
 }

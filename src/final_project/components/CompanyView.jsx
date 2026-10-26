@@ -8,6 +8,7 @@ import { METRICS, computeMetrics } from "../utils/metrics";
 import { evaluateRules } from "../utils/rules";
 import { formatMetric, formatMoney } from "../utils/format";
 import { ScoreBadge } from "./ScreenerView";
+import { secFilingUrl } from "../utils/sources";
 
 const KEY_METRICS = [
   "marketCap", "pe", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "netMargin",
@@ -86,6 +87,14 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
             {formatMetric(metrics.price, "money", currency)}
             <span className="detail-change cell-sub">
               {company.price ? `close ${company.price.asOf}` : "price unavailable"}
+              {company.price?.source && (
+                <>
+                  {" · "}
+                  <a className="source-link" href={company.price.source.url} target="_blank" rel="noreferrer">
+                    {company.price.source.label} history ↗
+                  </a>
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -174,6 +183,7 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
 
       <section>
         <div className="section-title">Financial history (annual reports)</div>
+        <p className="cell-sub">Click any number to open the SEC filing it was taken from.</p>
         <div className="table-wrap">
           <table className="table financials-table">
             <thead>
@@ -188,11 +198,23 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
               {FINANCIAL_ROWS.map(([field, label, kind]) => (
                 <tr key={field}>
                   <td className="bold">{label}</td>
-                  {years.map((y) => (
-                    <td key={y.periodEnd} className="mono">
-                      {kind === "eps" ? formatMetric(y[field], "x") : formatMoney(y[field], currency)}
-                    </td>
-                  ))}
+                  {years.map((y) => {
+                    const text = kind === "eps" ? formatMetric(y[field], "x") : formatMoney(y[field], currency);
+                    const url = secFilingUrl(company.cik, y.accn?.[field]);
+                    return (
+                      <td key={y.periodEnd} className="mono">
+                        {url ? (
+                          <a className="source-link" href={url} target="_blank" rel="noreferrer" title={`Source: SEC filing ${y.accn[field]}`}>
+                            {text}
+                          </a>
+                        ) : (
+                          <span title={field === "totalLiabilities" && y.totalLiabilitiesDerived ? "Derived: total assets minus equity" : undefined}>
+                            {text}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

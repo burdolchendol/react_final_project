@@ -688,3 +688,5 @@ h1 {
 .rule-off { opacity: 0.5; }
 .rules-actions { padding: 14px 0 24px; }
 .company-grid, .rules-table td { text-align: left; }
+.source-link { color: inherit; text-decoration: underline dotted var(--text-muted); text-underline-offset: 3px; }
+.source-link:hover { color: var(--blue); }

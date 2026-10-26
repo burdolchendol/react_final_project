@@ -20,5 +20,5 @@ export async function fetchPrices(symbol) {
   const since = new Date(Date.now() - 5 * 365 * 86_400_000).toISOString().slice(0, 10);
   const csv = await fetchText(`https://stooq.com/q/d/l/?s=${encodeURIComponent(symbol)}&i=d`);
   const prices = parseStooqCsv(csv, since);
-  return { ...prices, source: { label: "Stooq", url: `https://stooq.com/q/?s=${symbol}` } };
+  return { ...prices, source: { label: "Stooq", url: `https://stooq.com/q/d/?s=${symbol}` } };
 }

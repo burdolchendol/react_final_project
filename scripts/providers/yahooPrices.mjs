@@ -24,5 +24,5 @@ export function normalizeYahooChart(json) {
 export async function fetchPrices(symbol) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1d`;
   const prices = normalizeYahooChart(await fetchJson(url, { headers: HEADERS }));
-  return { ...prices, source: { label: "Yahoo Finance", url: `https://finance.yahoo.com/quote/${symbol}` } };
+  return { ...prices, source: { label: "Yahoo Finance", url: `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/history/` } };
 }
