@@ -7,9 +7,9 @@ export default function NotFoundView({ setActiveNav }) {
       </p>
       <button 
         className="sort-btn sort-btn-active" 
-        onClick={() => setActiveNav("Home")}
+        onClick={() => setActiveNav("Screener")}
       >
-        Return to Home
+        Return to Screener
       </button>
     </div>
   );
