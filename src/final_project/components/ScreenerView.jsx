@@ -8,7 +8,18 @@ import MarketPicker from "./MarketPicker";
 import DataStatus from "./DataStatus";
 
 const PAGE_SIZE = 50;
-const COLUMNS = ["price", "marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
+// Shown after the columns for your rules, unless a rule already shows them.
+const EXTRA_COLUMNS = ["marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
+
+// Per metric: "fail" if any rule on it fails, else "pass" if one passes, else "na".
+function statusByMetric(verdict) {
+  const out = {};
+  for (const { rule, status } of verdict.results) {
+    const prev = out[rule.metric];
+    if (status === "fail" || (status === "pass" && prev !== "fail") || !prev) out[rule.metric] = status;
+  }
+  return out;
+}
 
 export default function ScreenerView({ market, setMarket, rules, settings, watchlist, toggleStar, onOpenCompany }) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
@@ -60,6 +71,18 @@ export default function ScreenerView({ market, setMarket, rules, settings, watch
 
   const enabledRules = rules.filter((r) => r.enabled).length;
 
+  // One column per metric your rules check, in rule order, then the usual extras.
+  const ruleColumns = useMemo(() => [...new Set(rules.filter((r) => r.enabled).map((r) => r.metric))], [rules]);
+  const columns = useMemo(
+    () => ["price", ...ruleColumns.filter((k) => k !== "price"), ...EXTRA_COLUMNS.filter((k) => !ruleColumns.includes(k))],
+    [ruleColumns]
+  );
+  const ruleTitle = (metric) =>
+    rules
+      .filter((r) => r.enabled && r.metric === metric)
+      .map((r) => `${r.label}: ${r.op === ">=" ? "at least" : "at most"} ${formatMetric(r.threshold, METRICS[metric].format)}`)
+      .join("\n");
+
   const toggleSort = (key) =>
     setSort((prev) => ({ key, dir: prev.key === key ? -prev.dir : key === "ticker" ? 1 : -1 }));
   const arrow = (key) => (sort.key === key ? (sort.dir > 0 ? " ▲" : " ▼") : "");
@@ -107,6 +130,10 @@ export default function ScreenerView({ market, setMarket, rules, settings, watch
             companies without a price
           </label>
           <span className="cell-sub">{sorted.length.toLocaleString()} matching</span>
+          <span className="cell-sub rule-legend">
+            <span className="cell-pass">Green</span> passes your rule · <span className="cell-fail">red</span> fails ·
+            hover a gold column heading to see its rule
+          </span>
         </div>
       )}
 
@@ -118,43 +145,54 @@ export default function ScreenerView({ market, setMarket, rules, settings, watch
                 <th className="star-cell" aria-label="Starred"></th>
                 <th className="sortable" onClick={() => toggleSort("ticker")}>Company{arrow("ticker")}</th>
                 <th className="sortable" onClick={() => toggleSort("score")}>Rules passed{arrow("score")}</th>
-                {COLUMNS.map((key) => (
-                  <th key={key} className="sortable" onClick={() => toggleSort(key)}>
-                    {METRICS[key].label}
-                    {arrow(key)}
-                  </th>
-                ))}
+                {columns.map((key) => {
+                  const isRule = ruleColumns.includes(key);
+                  return (
+                    <th
+                      key={key}
+                      className={`sortable ${isRule ? "rule-col" : ""}`}
+                      onClick={() => toggleSort(key)}
+                      title={isRule ? ruleTitle(key) : undefined}
+                    >
+                      {METRICS[key].label}
+                      {arrow(key)}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {sorted.slice(0, shown).map(({ company, metrics, verdict }) => (
-                <tr key={company.ticker} className="clickable-row" onClick={() => onOpenCompany(company.ticker)}>
-                  <td className="star-cell">
-                    <button
-                      className={`star-btn ${watchlist.has(company.ticker) ? "star-on" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleStar(company.ticker);
-                      }}
-                      aria-label={`${watchlist.has(company.ticker) ? "Unstar" : "Star"} ${company.ticker}`}
-                    >
-                      {watchlist.has(company.ticker) ? "★" : "☆"}
-                    </button>
-                  </td>
-                  <td>
-                    <div className="mono bold">{company.ticker}</div>
-                    <div className="cell-sub">{company.name}</div>
-                  </td>
-                  <td>
-                    <ScoreBadge verdict={verdict} />
-                  </td>
-                  {COLUMNS.map((key) => (
-                    <td key={key} className="mono">
-                      {formatMetric(metrics[key], METRICS[key].format, company.currency)}
+              {sorted.slice(0, shown).map(({ company, metrics, verdict }) => {
+                const status = statusByMetric(verdict);
+                return (
+                  <tr key={company.ticker} className="clickable-row" onClick={() => onOpenCompany(company.ticker)}>
+                    <td className="star-cell">
+                      <button
+                        className={`star-btn ${watchlist.has(company.ticker) ? "star-on" : ""}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleStar(company.ticker);
+                        }}
+                        aria-label={`${watchlist.has(company.ticker) ? "Unstar" : "Star"} ${company.ticker}`}
+                      >
+                        {watchlist.has(company.ticker) ? "★" : "☆"}
+                      </button>
                     </td>
-                  ))}
-                </tr>
-              ))}
+                    <td>
+                      <div className="mono bold">{company.ticker}</div>
+                      <div className="cell-sub">{company.name}</div>
+                    </td>
+                    <td>
+                      <ScoreBadge verdict={verdict} />
+                    </td>
+                    {columns.map((key) => (
+                      <td key={key} className={`mono ${status[key] ? `cell-${status[key]}` : ""}`}>
+                        {formatMetric(metrics[key], METRICS[key].format, company.currency)}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

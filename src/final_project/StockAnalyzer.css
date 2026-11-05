@@ -699,3 +699,8 @@ h1 {
 .show-more { justify-content: center; padding: 14px 0; }
 .star-cell { width: 32px; }
 .star-btn.star-on { color: var(--gold); }
+.table th.rule-col { color: var(--gold); }
+.cell-pass { color: var(--up); background: rgba(63, 182, 139, 0.08); }
+.cell-fail { color: var(--down); background: rgba(229, 72, 77, 0.08); }
+.rule-legend .cell-pass, .rule-legend .cell-fail { background: none; font-weight: 600; }
+.rule-legend { flex-basis: 100%; }
