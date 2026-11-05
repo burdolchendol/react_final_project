@@ -7,11 +7,16 @@ import { formatMetric } from "../utils/format";
 import MarketPicker from "./MarketPicker";
 import DataStatus from "./DataStatus";
 
-const COLUMNS = ["price", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
+const PAGE_SIZE = 50;
+const COLUMNS = ["price", "marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
 
 export default function ScreenerView({ market, setMarket, rules, settings, onOpenCompany }) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
   const [sort, setSort] = useState({ key: "score", dir: -1 });
+  const [query, setQuery] = useState("");
+  const [minPassed, setMinPassed] = useState(0);
+  const [hideNoPrice, setHideNoPrice] = useState(true);
+  const [shown, setShown] = useState(PAGE_SIZE);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -21,20 +26,39 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
     });
   }, [data, rules, settings]);
 
+  // Snapshots built without prices would otherwise hide everything.
+  const anyPriced = useMemo(() => rows.some((r) => r.metrics.price != null), [rows]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter(
+      ({ company, metrics, verdict }) =>
+        verdict.passed >= minPassed &&
+        (!hideNoPrice || !anyPriced || metrics.price != null) &&
+        (!q || company.ticker.toLowerCase().startsWith(q) || company.name.toLowerCase().includes(q))
+    );
+  }, [rows, query, minPassed, hideNoPrice, anyPriced]);
+
   const sorted = useMemo(() => {
     const value = (r) => {
       if (sort.key === "score") return r.verdict.applicable ? r.verdict.passed / r.verdict.total : -1;
       if (sort.key === "ticker") return r.company.ticker;
       return r.metrics[sort.key];
     };
-    return [...rows].sort((a, b) => {
+    // Ties (common for scores) go to the bigger company.
+    const bySize = (a, b) => (b.metrics.marketCap ?? -1) - (a.metrics.marketCap ?? -1);
+    return [...filtered].sort((a, b) => {
       const va = value(a);
       const vb = value(b);
+      if (va == null && vb == null) return bySize(a, b);
       if (va == null) return 1;
       if (vb == null) return -1;
-      return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * sort.dir;
+      const diff = (typeof va === "string" ? va.localeCompare(vb) : va - vb) * sort.dir;
+      return diff || bySize(a, b);
     });
-  }, [rows, sort]);
+  }, [filtered, sort]);
+
+  const enabledRules = rules.filter((r) => r.enabled).length;
 
   const toggleSort = (key) =>
     setSort((prev) => ({ key, dir: prev.key === key ? -prev.dir : key === "ticker" ? 1 : -1 }));
@@ -50,6 +74,41 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
 
       <MarketPicker market={market} setMarket={setMarket} />
       <DataStatus loading={loading} error={error} index={data} />
+
+      {rows.length > 0 && (
+        <div className="controls screener-filters">
+          <input
+            className="form-input search-input"
+            type="search"
+            placeholder="Search ticker or company"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setShown(PAGE_SIZE);
+            }}
+            aria-label="Search companies"
+          />
+          <label className="control-label" htmlFor="min-passed">Passes at least</label>
+          <select
+            id="min-passed"
+            className="form-input"
+            value={minPassed}
+            onChange={(e) => {
+              setMinPassed(Number(e.target.value));
+              setShown(PAGE_SIZE);
+            }}
+          >
+            {Array.from({ length: enabledRules + 1 }, (_, n) => (
+              <option key={n} value={n}>{n} of {enabledRules} rules</option>
+            ))}
+          </select>
+          <label className="control-label checkbox-label">
+            <input type="checkbox" checked={hideNoPrice} onChange={(e) => setHideNoPrice(e.target.checked)} /> Hide
+            companies without a price
+          </label>
+          <span className="cell-sub">{sorted.length.toLocaleString()} matching</span>
+        </div>
+      )}
 
       {sorted.length > 0 && (
         <div className="table-wrap">
@@ -67,7 +126,7 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
               </tr>
             </thead>
             <tbody>
-              {sorted.map(({ company, metrics, verdict }) => (
+              {sorted.slice(0, shown).map(({ company, metrics, verdict }) => (
                 <tr key={company.ticker} className="clickable-row" onClick={() => onOpenCompany(company.ticker)}>
                   <td>
                     <div className="mono bold">{company.ticker}</div>
@@ -85,6 +144,13 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {sorted.length > shown && (
+        <div className="controls show-more">
+          <button className="sort-btn" onClick={() => setShown((n) => n + PAGE_SIZE)}>
+            Show {Math.min(PAGE_SIZE, sorted.length - shown)} more ({(sorted.length - shown).toLocaleString()} left)
+          </button>
         </div>
       )}
     </div>

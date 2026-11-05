@@ -2,7 +2,10 @@
 // Free, no API key. Docs: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 // SEC asks every client to send a User-Agent with a contact address and to stay under 10 requests/second.
 
-import { fetchJson } from "../lib/http.mjs";
+import { join } from "node:path";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
+import yauzl from "yauzl";
+import { fetchJson, downloadToFile } from "../lib/http.mjs";
 
 // SEC blocks requests whose User-Agent doesn't name a person/company and a contact
 // email (HTTP 403), so this must be set by whoever runs the fetch. See README.
@@ -145,32 +148,178 @@ export function normalizeCompanyFacts(companyFacts) {
   });
 }
 
-let tickerMapPromise;
-async function tickerToCik(ticker) {
-  tickerMapPromise ??= fetchJson("https://www.sec.gov/files/company_tickers.json", { headers: headers() }).then(
-    (data) => new Map(Object.values(data).map((c) => [c.ticker.toUpperCase(), c]))
+// Exchanges kept when screening "all" companies. OTC and unlisted filers are left out.
+const LISTED_EXCHANGES = new Set(["NYSE", "Nasdaq", "CBOE"]);
+
+const sourceFor = (cik) => ({
+  label: "SEC EDGAR (XBRL company facts)",
+  url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=10-K`,
+});
+
+let companyListPromise;
+// Every ticker SEC knows, with CIK and exchange: [{ ticker, cik, name, exchange }].
+function secCompanyList() {
+  companyListPromise ??= fetchJson("https://www.sec.gov/files/company_tickers_exchange.json", {
+    headers: headers(),
+  }).then(({ fields, data }) =>
+    data.map((row) => {
+      const c = Object.fromEntries(fields.map((f, i) => [f, row[i]]));
+      return { ticker: c.ticker.toUpperCase(), cik: String(c.cik).padStart(10, "0"), name: c.name, exchange: c.exchange };
+    })
   );
-  const entry = (await tickerMapPromise).get(ticker.toUpperCase());
-  if (!entry) throw new Error(`${ticker} not found in SEC ticker list`);
-  return { cik: String(entry.cik_str).padStart(10, "0"), name: entry.title };
+  return companyListPromise;
 }
 
-export async function fetchFundamentals(ticker) {
-  const { cik, name } = await tickerToCik(ticker);
+// One entry per listed company. Share classes of the same company (GOOGL/GOOG)
+// share one set of financials, so only the first ticker SEC lists is kept.
+export async function listedCompanies() {
+  const seen = new Set();
+  return (await secCompanyList()).filter((c) => {
+    if (!LISTED_EXCHANGES.has(c.exchange) || seen.has(c.cik)) return false;
+    seen.add(c.cik);
+    return true;
+  });
+}
+
+export async function resolveTickers(tickers) {
+  const byTicker = new Map((await secCompanyList()).map((c) => [c.ticker, c]));
+  return tickers.map((t) => byTicker.get(t.toUpperCase()) ?? { ticker: t.toUpperCase(), missing: true });
+}
+
+// Per-company API: two requests each. Best for a short list of tickers.
+export async function fetchFundamentals(company) {
+  if (company.missing) throw new Error(`${company.ticker} not found in SEC ticker list`);
+  const { cik } = company;
   const [facts, submissions] = await Promise.all([
     fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, { headers: headers() }),
     fetchJson(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: headers() }).catch(() => null),
   ]);
-
   return {
     cik,
-    name: submissions?.name || facts.entityName || name,
+    name: submissions?.name || facts.entityName || company.name,
     sector: submissions?.sicDescription || null,
-    exchange: submissions?.exchanges?.[0] || null,
+    exchange: submissions?.exchanges?.[0] || company.exchange || null,
     fiscalYears: normalizeCompanyFacts(facts),
-    source: {
-      label: "SEC EDGAR (XBRL company facts)",
-      url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=10-K`,
-    },
+    source: sourceFor(cik),
   };
+}
+
+const BULK_FILES = {
+  facts: "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip",
+  submissions: "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip",
+};
+// SEC rebuilds the zips nightly, so a download younger than this is reused.
+const MAX_AGE_MS = 20 * 60 * 60 * 1000;
+
+// Downloads a bulk zip into cacheDir (once a day at most) and returns its path.
+async function cachedZip(kind, cacheDir) {
+  mkdirSync(cacheDir, { recursive: true });
+  const file = join(cacheDir, `${kind}.zip`);
+  if (existsSync(file) && Date.now() - statSync(file).mtimeMs < MAX_AGE_MS) {
+    console.log(`Using cached ${file}`);
+    return file;
+  }
+  console.log(`Downloading ${BULK_FILES[kind]} (over 1 GB, this takes a while) …`);
+  const partial = `${file}.part`;
+  try {
+    await downloadToFile(BULK_FILES[kind], partial, { headers: headers() });
+  } catch (err) {
+    rmSync(partial, { force: true });
+    throw err;
+  }
+  renameSync(partial, file);
+  return file;
+}
+
+// Bulk path: SEC publishes every filer's data nightly as two zips. Two downloads
+// instead of thousands of API calls. The JSON is read straight out of the zip,
+// one company at a time, so nothing has to be extracted to disk.
+// Yields { company, fundamentals } for each requested company found.
+export async function* bulkFundamentals(companies, { cacheDir, factsZip, withSectors = true, keepZips = true } = {}) {
+  const downloaded = [];
+  try {
+    yield* readBulk(companies, { cacheDir, factsZip, withSectors, downloaded });
+  } finally {
+    // The zips are large; don't leave them behind unless asked to.
+    if (!keepZips) for (const f of downloaded) rmSync(f, { force: true });
+  }
+}
+
+async function* readBulk(companies, { cacheDir, factsZip, withSectors, downloaded }) {
+  const byFile = new Map(companies.map((c) => [`CIK${c.cik}.json`, c]));
+
+  // Industry (SIC description) comes from submissions.zip.
+  const sectors = new Map();
+  if (withSectors) {
+    const file = await cachedZip("submissions", cacheDir);
+    downloaded.push(file);
+    for await (const [name, json] of readZipEntries(file, (n) => byFile.has(n))) {
+      if (json.sicDescription) sectors.set(name, json.sicDescription);
+    }
+    console.log(`Industries found for ${sectors.size} companies`);
+  }
+
+  const file = factsZip ?? (await cachedZip("facts", cacheDir));
+  if (!factsZip) downloaded.push(file);
+  let done = 0;
+  for await (const [name, json] of readZipEntries(file, (n) => byFile.has(n))) {
+    const c = byFile.get(name);
+    if (++done % 1000 === 0) console.log(`Financials: ${done}/${companies.length}`);
+    yield {
+      company: c,
+      fundamentals: {
+        cik: c.cik,
+        name: json.entityName || c.name,
+        sector: sectors.get(name) ?? null,
+        exchange: c.exchange ?? null,
+        fiscalYears: normalizeCompanyFacts(json),
+        source: sourceFor(c.cik),
+      },
+    };
+  }
+}
+
+// Reads matching JSON entries one at a time so memory stays small.
+async function* readZipEntries(file, include) {
+  const zip = await new Promise((resolve, reject) =>
+    yauzl.open(file, { lazyEntries: true }, (err, z) => (err ? reject(err) : resolve(z)))
+  );
+  const nextEntry = () =>
+    new Promise((resolve, reject) => {
+      const onEntry = (entry) => {
+        zip.off("end", onEnd);
+        zip.off("error", reject);
+        resolve(entry);
+      };
+      const onEnd = () => {
+        zip.off("entry", onEntry);
+        resolve(null);
+      };
+      zip.once("entry", onEntry);
+      zip.once("end", onEnd);
+      zip.once("error", reject);
+      zip.readEntry();
+    });
+  const readEntry = (entry) =>
+    new Promise((resolve, reject) =>
+      zip.openReadStream(entry, (err, stream) => {
+        if (err) return reject(err);
+        const chunks = [];
+        stream.on("data", (c) => chunks.push(c));
+        stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+        stream.on("error", reject);
+      })
+    );
+  try {
+    for (let entry = await nextEntry(); entry; entry = await nextEntry()) {
+      if (!include(entry.fileName)) continue;
+      try {
+        yield [entry.fileName, JSON.parse(await readEntry(entry))];
+      } catch (err) {
+        console.error(`Skipping ${entry.fileName}: ${err.message}`);
+      }
+    }
+  } finally {
+    zip.close();
+  }
 }

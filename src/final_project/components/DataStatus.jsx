@@ -8,7 +8,8 @@ export default function DataStatus({ loading, error, index }) {
     return (
       <div className="data-note">
         No data snapshot yet. Run the <b>Refresh market data</b> workflow in GitHub Actions (or{" "}
-        <code>npm run fetch:us</code> locally) to download company financials.
+        <code>npm run fetch:us</code> locally, <code>npm run fetch:us:quick</code> for a short list) to download
+        company financials.
       </div>
     );
   }
@@ -16,7 +17,7 @@ export default function DataStatus({ loading, error, index }) {
   const when = new Date(index.generatedAt).toLocaleString();
   return (
     <p className="data-note">
-      {index.companies.length} companies · data refreshed {when}
+      {index.companies.length.toLocaleString()} companies · data refreshed {when}
       {index.failures?.length > 0 && ` · ${index.failures.length} could not be loaded (${index.failures.map((f) => f.ticker).join(", ")})`}
     </p>
   );

@@ -1,5 +1,5 @@
 // Market registry. Each market says where its fundamentals and prices come
-// from and which tickers to snapshot. To add Singapore later, write an SGX
+// from and which companies to snapshot. To add Singapore later, write an SGX
 // fundamentals provider that returns the same shape as secEdgar.fetchFundamentals
 // (see README "Data layer") and register it here with priceSymbol: (t) => `${t}.SI`.
 
@@ -14,10 +14,15 @@ export const MARKETS = {
   us: {
     label: "United States",
     currency: "USD",
-    tickers: () => readTickers("./us.tickers.json"),
-    fundamentals: secEdgar.fetchFundamentals,
     // Fails before any download if required settings are missing.
     checkConfig: secEdgar.secUserAgent,
+    // "all": every NYSE / Nasdaq / Cboe company, fundamentals from SEC's bulk zip.
+    listAll: secEdgar.listedCompanies,
+    bulkFundamentals: secEdgar.bulkFundamentals,
+    // "list": a short watchlist (quick local runs), fundamentals per company.
+    watchlist: () => readTickers("./us.tickers.json"),
+    resolveTickers: secEdgar.resolveTickers,
+    fundamentals: secEdgar.fetchFundamentals,
     // Tried in order until one succeeds.
     priceSources: [
       { fetch: yahoo.fetchPrices, symbol: (t) => t.replace(".", "-") },

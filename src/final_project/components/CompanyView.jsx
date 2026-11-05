@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend,
 } from "recharts";
-import { loadMarketIndex, loadPriceHistory } from "../data/markets";
+import { loadMarketIndex, loadCompanyDetail, loadPriceHistory } from "../data/markets";
 import useAsync from "../hooks/useAsync";
 import { METRICS, computeMetrics } from "../utils/metrics";
 import { evaluateRules } from "../utils/rules";
@@ -41,7 +41,9 @@ const TOOLTIP = {
 
 export default function CompanyView({ market, ticker, rules, settings, onBack }) {
   const index = useAsync(() => loadMarketIndex(market), market);
+  const detail = useAsync(() => loadCompanyDetail(market, ticker), `${market}:${ticker}`);
   const prices = useAsync(() => loadPriceHistory(market, ticker), `${market}:${ticker}`);
+  const history = prices.data?.history;
   const [range, setRange] = useState("1Y");
 
   const company = index.data?.companies.find((c) => c.ticker === ticker);
@@ -49,11 +51,11 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
   const verdict = useMemo(() => metrics && evaluateRules(rules, metrics), [rules, metrics]);
 
   const chartData = useMemo(() => {
-    if (!prices.data?.length) return [];
-    const last = Date.parse(prices.data[prices.data.length - 1][0]);
+    if (!history?.length) return [];
+    const last = Date.parse(history[history.length - 1][0]);
     const since = last - RANGES[range] * 86_400_000;
-    return prices.data.filter(([d]) => Date.parse(d) >= since).map(([date, close]) => ({ date, close }));
-  }, [prices.data, range]);
+    return history.filter(([d]) => Date.parse(d) >= since).map(([date, close]) => ({ date, close }));
+  }, [history, range]);
 
   if (index.loading) return <div className="page2"><p className="data-note">Loading…</p></div>;
   if (!company) {
@@ -66,7 +68,13 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
   }
 
   const currency = company.currency;
-  const years = company.fiscalYears;
+  // The detail file has the full history and the SEC filing behind each number.
+  const years = detail.data?.fiscalYears ?? company.fiscalYears;
+  const priceSource = prices.data?.source;
+  const secSource = {
+    label: "SEC EDGAR filings",
+    url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${company.cik}&type=10-K`,
+  };
   const latestFy = years[years.length - 1];
 
   return (
@@ -87,11 +95,11 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
             {formatMetric(metrics.price, "money", currency)}
             <span className="detail-change cell-sub">
               {company.price ? `close ${company.price.asOf}` : "price unavailable"}
-              {company.price?.source && (
+              {priceSource && (
                 <>
                   {" · "}
-                  <a className="source-link" href={company.price.source.url} target="_blank" rel="noreferrer">
-                    {company.price.source.label} history ↗
+                  <a className="source-link" href={priceSource.url} target="_blank" rel="noreferrer">
+                    {priceSource.label} history ↗
                   </a>
                 </>
               )}
@@ -224,7 +232,7 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
 
       <p className="cell-sub sources">
         Sources:{" "}
-        {company.sources.map((s, i) => (
+        {[secSource, priceSource].filter(Boolean).map((s, i) => (
           <span key={s.url}>
             {i > 0 && " · "}
             <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a>

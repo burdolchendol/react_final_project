@@ -47,21 +47,35 @@ The **Screener** page scores real US companies against your own rules, using fre
 | Daily closing prices (5 years) | Yahoo Finance chart endpoint, with Stooq as a fallback | No |
 
 GitHub Pages can't call these APIs from the browser (no CORS, and SEC needs a User-Agent header), so the app reads a
-**static snapshot** in `public/data/<market>/`. The *Refresh market data* GitHub Action rebuilds it every Monday
-(or on demand from the Actions tab), commits it, and redeploys the site.
+**static snapshot** in `public/data/<market>/` (git-ignored, never committed). The *Refresh market data* GitHub Action
+rebuilds it every Monday (or on demand from the Actions tab) and deploys it with the site.
+
+**Run it yourself (one command):**
 
 ```bash
-cp .env.example .env                                        # then put your name and email in it (SEC requires this)
-npm run fetch:us                                            # refresh every ticker in scripts/markets/us.tickers.json
-node scripts/fetch-data.mjs --market us --tickers AAPL,KO   # quick test with a few tickers (overwrites the index)
-npm test                                                    # unit tests for parsers, metrics and rules
+cp .env.example .env        # then put your name and email in it (SEC requires this)
+npm run fetch:us            # every NYSE / Nasdaq / Cboe company (~6,000)
+npm run dev                 # open the Screener
 ```
 
-- **Pick tickers:** edit `scripts/markets/us.tickers.json`. US filers of 10-K reports only (no ADRs, and dual-class
-  quirks like BRK-B make per-share ratios misleading).
+`fetch:us` downloads SEC's two nightly bulk files (`companyfacts.zip` and `submissions.zip`, about 2.5 GB together),
+reads each company's JSON straight out of the zips one at a time (nothing is extracted, memory stays low), writes a
+compact `index.json` for the screener plus one small file per company that loads only when you open it, then deletes the
+zips. Prices then come from Yahoo at about 2 requests a second, so a full run takes 1 to 2 hours. A failed run leaves
+the previous snapshot in place.
+
+| Command | What it does |
+| --- | --- |
+| `npm run fetch:us` | All listed companies, with prices |
+| `npm run fetch:us -- --no-prices` | All companies, financials only (fast, but price-based ratios are blank) |
+| `npm run fetch:us -- --keep-zips` | Keep the zips in `.cache/sec/` so another run today skips the download |
+| `npm run fetch:us:quick` | Just the watchlist in `scripts/markets/us.tickers.json` (a minute or two) |
+| `npm test` | Unit tests for parsers, metrics and rules |
+
 - **SEC contact (required):** SEC refuses requests (HTTP 403) that don't name who is asking. Locally, set
   `SEC_USER_AGENT="Your Name you@example.com"` in `.env` (git-ignored). For the GitHub Action, add the same value as a
   repository variable: Settings → Secrets and variables → Actions → Variables → `SEC_USER_AGENT`.
+- **Fair use:** two bulk downloads replace thousands of SEC API calls; SEC API calls in quick mode stay under their 10/second limit.
 - **Your rules:** the *My Rules* page starts with Graham's seven defensive-investor tests. Change thresholds, switch rules on or
   off, or add rules on any metric. They are saved in your browser.
 
