@@ -23,6 +23,7 @@ export default function StockAnalyzer() {
   // Companies starred on the Screener, saved in this browser.
   const [starred, setStarred] = useStoredState("analyzer.starred.v1", []);
   const watchlist = useMemo(() => new Set(starred), [starred]);
+  const [hiddenColumns, setHiddenColumns] = useStoredState("analyzer.hiddenColumns.v1", []);
   const toggleStar = (ticker) =>
     setStarred((prev) => (prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker]));
   const [activeNav, setActiveNav] = useState("Screener");
@@ -64,6 +65,8 @@ export default function StockAnalyzer() {
           settings={settings}
           watchlist={watchlist}
           toggleStar={toggleStar}
+          hiddenColumns={hiddenColumns}
+          setHiddenColumns={setHiddenColumns}
           onOpenCompany={(ticker) => {
             setOpenTicker(ticker);
             window.scrollTo(0, 0);

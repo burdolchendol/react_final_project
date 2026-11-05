@@ -77,3 +77,14 @@ test("secFilingUrl builds the EDGAR filing index link", async () => {
   );
   assert.equal(secFilingUrl(null, "x"), null);
 });
+
+test("total debt and intangibles combine the reported pieces", async () => {
+  const { totalDebtOf, intangiblesGoodwillOf } = await import("../src/final_project/utils/metrics.js");
+  assert.equal(totalDebtOf({ longTermDebt: 100, debtCurrent: 20, longTermDebtCurrent: 5 }), 120);
+  assert.equal(totalDebtOf({ longTermDebt: 100, longTermDebtCurrent: 5, shortTermBorrowings: 3 }), 108);
+  assert.equal(totalDebtOf({ shortTermBorrowings: 3 }), 3);
+  assert.equal(totalDebtOf({}), null);
+  assert.equal(intangiblesGoodwillOf({ goodwill: 50, intangibles: 10 }), 60);
+  assert.equal(intangiblesGoodwillOf({ intangiblesInclGoodwill: 70 }), 70);
+  assert.equal(intangiblesGoodwillOf({}), null);
+});

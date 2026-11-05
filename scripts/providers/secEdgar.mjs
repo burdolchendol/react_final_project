@@ -62,6 +62,33 @@ export const FIELD_CONCEPTS = {
     unit: "USD",
     concepts: ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations"],
   },
+  // Total debt = long-term debt (non-current) + debt due within a year. Filers tag
+  // the short-term part either as one DebtCurrent total or as its pieces.
+  debtCurrent: { kind: "instant", unit: "USD", concepts: ["DebtCurrent"] },
+  longTermDebtCurrent: {
+    kind: "instant",
+    unit: "USD",
+    concepts: ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
+  },
+  shortTermBorrowings: { kind: "instant", unit: "USD", concepts: ["ShortTermBorrowings", "CommercialPaper"] },
+  cash: {
+    kind: "instant",
+    unit: "USD",
+    concepts: [
+      "CashAndCashEquivalentsAtCarryingValue",
+      "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
+      "CashAndDueFromBanks",
+      "Cash",
+    ],
+  },
+  goodwill: { kind: "instant", unit: "USD", concepts: ["Goodwill"] },
+  intangibles: {
+    kind: "instant",
+    unit: "USD",
+    concepts: ["IntangibleAssetsNetExcludingGoodwill", "FiniteLivedIntangibleAssetsNet"],
+  },
+  // Some filers report one combined figure instead of the two above.
+  intangiblesInclGoodwill: { kind: "instant", unit: "USD", concepts: ["IntangibleAssetsNetIncludingGoodwill"] },
   operatingCashFlow: {
     kind: "duration",
     unit: "USD",

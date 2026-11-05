@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadMarketIndex } from "../data/markets";
 import useAsync from "../hooks/useAsync";
 import { METRICS, computeMetrics } from "../utils/metrics";
@@ -9,7 +9,10 @@ import DataStatus from "./DataStatus";
 
 const PAGE_SIZE = 50;
 // Shown after the columns for your rules, unless a rule already shows them.
-const EXTRA_COLUMNS = ["marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
+const EXTRA_COLUMNS = [
+  "marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety",
+  "currentAssets", "currentLiabilities", "cash", "totalDebt", "equity", "intangiblesGoodwill",
+];
 
 // Per metric: "fail" if any rule on it fails, else "pass" if one passes, else "na".
 function statusByMetric(verdict) {
@@ -21,7 +24,9 @@ function statusByMetric(verdict) {
   return out;
 }
 
-export default function ScreenerView({ market, setMarket, rules, settings, watchlist, toggleStar, onOpenCompany }) {
+export default function ScreenerView({
+  market, setMarket, rules, settings, watchlist, toggleStar, hiddenColumns, setHiddenColumns, onOpenCompany,
+}) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
   const [sort, setSort] = useState({ key: "score", dir: -1 });
   const [query, setQuery] = useState("");
@@ -73,10 +78,11 @@ export default function ScreenerView({ market, setMarket, rules, settings, watch
 
   // One column per metric your rules check, in rule order, then the usual extras.
   const ruleColumns = useMemo(() => [...new Set(rules.filter((r) => r.enabled).map((r) => r.metric))], [rules]);
-  const columns = useMemo(
+  const allColumns = useMemo(
     () => ["price", ...ruleColumns.filter((k) => k !== "price"), ...EXTRA_COLUMNS.filter((k) => !ruleColumns.includes(k))],
     [ruleColumns]
   );
+  const columns = allColumns.filter((k) => !hiddenColumns.includes(k));
   const ruleTitle = (metric) =>
     rules
       .filter((r) => r.enabled && r.metric === metric)
@@ -134,6 +140,17 @@ export default function ScreenerView({ market, setMarket, rules, settings, watch
             <span className="cell-pass">Green</span> passes your rule · <span className="cell-fail">red</span> fails ·
             hover a gold column heading to see its rule
           </span>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="table-toolbar">
+          <ColumnPicker
+            columns={allColumns}
+            ruleColumns={ruleColumns}
+            hidden={hiddenColumns}
+            setHidden={setHiddenColumns}
+          />
         </div>
       )}
 
@@ -216,5 +233,52 @@ export function ScoreBadge({ verdict }) {
     <span className={`score-badge ${tone}`} title={`${total - applicable} rule(s) had no data`}>
       {passed}/{total}
     </span>
+  );
+}
+
+// "Columns" dropdown: tick the columns to show. Your choice is saved in this browser.
+function ColumnPicker({ columns, ruleColumns, hidden, setHidden }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const toggle = (key) =>
+    setHidden((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  const shownCount = columns.filter((k) => !hidden.includes(k)).length;
+
+  return (
+    <div className="column-picker" ref={ref}>
+      <button className="sort-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="true">
+        Columns ({shownCount}/{columns.length}) ▾
+      </button>
+      {open && (
+        <div className="column-menu" role="menu">
+          <div className="column-menu-actions">
+            <button className="sort-btn" onClick={() => setHidden([])}>Show all</button>
+            <button className="sort-btn" onClick={() => setHidden(columns.filter((k) => k !== "price"))}>
+              Hide all
+            </button>
+          </div>
+          {columns.map((key) => (
+            <label key={key} className="column-option">
+              <input type="checkbox" checked={!hidden.includes(key)} onChange={() => toggle(key)} />
+              <span className={ruleColumns.includes(key) ? "rule-col-label" : ""}>{METRICS[key].label}</span>
+            </label>
+          ))}
+          <p className="cell-sub">Gold columns are checked by your rules.</p>
+        </div>
+      )}
+    </div>
   );
 }

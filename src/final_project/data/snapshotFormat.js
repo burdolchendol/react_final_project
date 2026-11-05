@@ -6,6 +6,8 @@ export const INDEX_FIELDS = [
   "revenue", "netIncome", "epsDiluted", "dilutedShares", "totalAssets", "totalLiabilities",
   "currentAssets", "currentLiabilities", "equity", "longTermDebt", "operatingCashFlow",
   "capex", "dividendsPerShare", "dividendsPaid",
+  "debtCurrent", "longTermDebtCurrent", "shortTermBorrowings", "cash", "goodwill", "intangibles",
+  "intangiblesInclGoodwill",
 ];
 
 // Metrics look back at most 11 years (10-year growth), so the index keeps that many.

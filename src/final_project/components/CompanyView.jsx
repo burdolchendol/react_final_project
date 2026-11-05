@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import { loadMarketIndex, loadCompanyDetail, loadPriceHistory } from "../data/markets";
 import useAsync from "../hooks/useAsync";
-import { METRICS, computeMetrics } from "../utils/metrics";
+import { METRICS, computeMetrics, totalDebtOf } from "../utils/metrics";
 import { evaluateRules } from "../utils/rules";
 import { formatMetric, formatMoney } from "../utils/format";
 import { ScoreBadge } from "./ScreenerView";
@@ -27,7 +27,11 @@ const FINANCIAL_ROWS = [
   ["equity", "Shareholders' equity", "money"],
   ["currentAssets", "Current assets", "money"],
   ["currentLiabilities", "Current liabilities", "money"],
+  ["cash", "Cash & equivalents", "money"],
   ["longTermDebt", "Long-term debt", "money"],
+  ["totalDebt", "Total debt", "money", totalDebtOf],
+  ["goodwill", "Goodwill", "money"],
+  ["intangibles", "Intangible assets", "money"],
   ["operatingCashFlow", "Operating cash flow", "money"],
   ["capex", "Capital expenditure", "money"],
 ];
@@ -203,12 +207,14 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
               </tr>
             </thead>
             <tbody>
-              {FINANCIAL_ROWS.map(([field, label, kind]) => (
+              {FINANCIAL_ROWS.map(([field, label, kind, derive]) => (
                 <tr key={field}>
                   <td className="bold">{label}</td>
                   {years.map((y) => {
-                    const text = kind === "eps" ? formatMetric(y[field], "x") : formatMoney(y[field], currency);
-                    const url = secFilingUrl(company.cik, y.accn?.[field]);
+                    const value = derive ? derive(y) : y[field];
+                    const text = kind === "eps" ? formatMetric(value, "x") : formatMoney(value, currency);
+                    // Derived rows add up several filed values, so they have no single source link.
+                    const url = derive ? null : secFilingUrl(company.cik, y.accn?.[field]);
                     return (
                       <td key={y.periodEnd} className="mono">
                         {url ? (
@@ -216,7 +222,15 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
                             {text}
                           </a>
                         ) : (
-                          <span title={field === "totalLiabilities" && y.totalLiabilitiesDerived ? "Derived: total assets minus equity" : undefined}>
+                          <span
+                            title={
+                              derive
+                                ? "Long-term debt plus debt due within a year"
+                                : field === "totalLiabilities" && y.totalLiabilitiesDerived
+                                  ? "Derived: total assets minus equity"
+                                  : undefined
+                            }
+                          >
                             {text}
                           </span>
                         )}

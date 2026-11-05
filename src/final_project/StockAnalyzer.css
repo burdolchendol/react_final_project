@@ -704,3 +704,23 @@ h1 {
 .cell-fail { color: var(--down); background: rgba(229, 72, 77, 0.08); }
 .rule-legend .cell-pass, .rule-legend .cell-fail { background: none; font-weight: 600; }
 .rule-legend { flex-basis: 100%; }
+.table-toolbar { display: flex; justify-content: flex-end; padding: 0 0 8px; }
+.column-picker { position: relative; }
+.column-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: 260px;
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+  text-align: left;
+}
+.column-menu-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.column-option { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; cursor: pointer; }
+.rule-col-label { color: var(--gold); }

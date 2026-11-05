@@ -9,6 +9,12 @@
 // format: "x" ratio, "pct" fraction shown as %, "money", "years", "count"
 export const METRICS = {
   price: { label: "Price", format: "money" },
+  currentAssets: { label: "Current assets", format: "money" },
+  currentLiabilities: { label: "Current liabilities", format: "money" },
+  cash: { label: "Cash & equivalents", format: "money" },
+  totalDebt: { label: "Total debt", format: "money", hint: "Long-term debt plus debt due within a year" },
+  equity: { label: "Shareholders' equity", format: "money" },
+  intangiblesGoodwill: { label: "Intangibles & goodwill", format: "money" },
   marketCap: { label: "Market cap", format: "money" },
   revenue: { label: "Revenue (latest FY)", format: "money" },
   pe: { label: "P/E (latest EPS)", format: "x" },
@@ -66,6 +72,22 @@ function streak(years, test) {
   return n;
 }
 
+// Long-term debt (non-current) plus debt due within a year; null when nothing is reported.
+export function totalDebtOf(y) {
+  const current = isNum(y.debtCurrent)
+    ? y.debtCurrent
+    : isNum(y.longTermDebtCurrent) || isNum(y.shortTermBorrowings)
+      ? (y.longTermDebtCurrent ?? 0) + (y.shortTermBorrowings ?? 0)
+      : null;
+  if (!isNum(y.longTermDebt) && current == null) return null;
+  return (y.longTermDebt ?? 0) + (current ?? 0);
+}
+
+export function intangiblesGoodwillOf(y) {
+  if (isNum(y.goodwill) || isNum(y.intangibles)) return (y.goodwill ?? 0) + (y.intangibles ?? 0);
+  return isNum(y.intangiblesInclGoodwill) ? y.intangiblesInclGoodwill : null;
+}
+
 const epsOf = (y) => (isNum(y.epsDiluted) ? y.epsDiluted : ratio(y.netIncome, y.dilutedShares));
 
 export function computeMetrics(company, settings = DEFAULT_SETTINGS) {
@@ -111,6 +133,12 @@ export function computeMetrics(company, settings = DEFAULT_SETTINGS) {
 
   return {
     price,
+    currentAssets: latest.currentAssets ?? null,
+    currentLiabilities: latest.currentLiabilities ?? null,
+    cash: latest.cash ?? null,
+    totalDebt: years.length ? totalDebtOf(latest) : null,
+    equity: latest.equity ?? null,
+    intangiblesGoodwill: years.length ? intangiblesGoodwillOf(latest) : null,
     marketCap,
     revenue: latest.revenue ?? null,
     eps,
