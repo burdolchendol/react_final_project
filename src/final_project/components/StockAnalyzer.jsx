@@ -12,17 +12,32 @@ import ScreenerView from "./ScreenerView";
 import CompanyView from "./CompanyView";
 import RulesView from "./RulesView";
 import useStoredState from "../hooks/useStoredState";
+import useAsync from "../hooks/useAsync";
+import { loadMarketIndex } from "../data/markets";
 import { DEFAULT_RULES } from "../utils/rules";
 import { DEFAULT_SETTINGS } from "../utils/metrics";
 
 export default function StockAnalyzer() {
   const stocks = useMemo(() => STOCKS_META.map(analyzeStock), []);
 
-  const [watchlist] = useState(new Set());
+  // Companies starred on the Screener, saved in this browser.
+  const [starred, setStarred] = useStoredState("analyzer.starred.v1", []);
+  const watchlist = useMemo(() => new Set(starred), [starred]);
+  const toggleStar = (ticker) =>
+    setStarred((prev) => (prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker]));
   const [activeNav, setActiveNav] = useState("Screener");
 
   // Real-data screener state. Rules and settings persist across visits.
   const [market, setMarket] = useStoredState("analyzer.market", "us");
+  const marketIndex = useAsync(() => loadMarketIndex(market), market);
+  // Starred companies with their real last close, for the ticker tape.
+  const favorites = useMemo(
+    () =>
+      (marketIndex.data?.companies ?? [])
+        .filter((c) => watchlist.has(c.ticker) && c.price)
+        .map((c) => ({ ticker: c.ticker, latestClose: c.price.last, changePct: null })),
+    [marketIndex.data, watchlist]
+  );
   const [openTicker, setOpenTicker] = useState(null);
   const [rules, setRules] = useStoredState("analyzer.rules.v1", DEFAULT_RULES);
   const [settings, setSettings] = useStoredState("analyzer.settings.v1", DEFAULT_SETTINGS);
@@ -32,7 +47,7 @@ export default function StockAnalyzer() {
 
   return (
     <div className="page">
-      <TickerTape stocks={stocks} watchlist={watchlist} />
+      <TickerTape stocks={stocks} favorites={favorites} />
       <NavBar
         activeNav={activeNav}
         setActiveNav={(item) => {
@@ -47,6 +62,8 @@ export default function StockAnalyzer() {
           setMarket={setMarket}
           rules={rules}
           settings={settings}
+          watchlist={watchlist}
+          toggleStar={toggleStar}
           onOpenCompany={(ticker) => {
             setOpenTicker(ticker);
             window.scrollTo(0, 0);

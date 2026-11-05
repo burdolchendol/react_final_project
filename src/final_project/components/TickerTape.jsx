@@ -1,15 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { fmt } from "../utils/analysis";
 
 // Signature scrolling strip of live-looking prices at the top of the app.
-// Can toggle between showing all stocks or just the starred watchlist.
-export default function TickerTape({ stocks, watchlist }) {
+// Can toggle between showing all stocks or just the companies starred on the Screener.
+export default function TickerTape({ stocks, favorites }) {
   const [mode, setMode] = useState("all"); // "all" | "favorites"
-
-  const favorites = useMemo(
-    () => stocks.filter((s) => watchlist.has(s.ticker)),
-    [stocks, watchlist]
-  );
 
   const visible = mode === "favorites" ? favorites : stocks;
 
@@ -31,16 +26,18 @@ export default function TickerTape({ stocks, watchlist }) {
       </div>
 
       {mode === "favorites" && favorites.length === 0 ? (
-        <div className="tape-empty">No favorites yet — star a stock on Home to add it here.</div>
+        <div className="tape-empty">No favorites yet — star a company on the Screener to add it here.</div>
       ) : (
         <div className="tape">
           {[...visible, ...visible].map((s, i) => (
             <span className="tape-item" key={i}>
               <b className="tape-ticker">{s.ticker}</b>{" "}
               <span className="mono">${fmt(s.latestClose)}</span>{" "}
-              <span className={s.changePct >= 0 ? "up" : "down"}>
-                {s.changePct >= 0 ? "▲" : "▼"} {Math.abs(s.changePct).toFixed(2)}%
-              </span>
+              {s.changePct != null && (
+                <span className={s.changePct >= 0 ? "up" : "down"}>
+                  {s.changePct >= 0 ? "▲" : "▼"} {Math.abs(s.changePct).toFixed(2)}%
+                </span>
+              )}
             </span>
           ))}
         </div>

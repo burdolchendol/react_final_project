@@ -86,6 +86,8 @@
 ============================================================ */
 .nav {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
   padding: 14px 32px;
   border-bottom: 1px solid var(--border);
@@ -695,3 +697,5 @@ h1 {
 .search-input { min-width: 220px; flex: 1; }
 .checkbox-label { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; }
 .show-more { justify-content: center; padding: 14px 0; }
+.star-cell { width: 32px; }
+.star-btn.star-on { color: var(--gold); }

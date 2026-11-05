@@ -10,7 +10,7 @@ import DataStatus from "./DataStatus";
 const PAGE_SIZE = 50;
 const COLUMNS = ["price", "marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety"];
 
-export default function ScreenerView({ market, setMarket, rules, settings, onOpenCompany }) {
+export default function ScreenerView({ market, setMarket, rules, settings, watchlist, toggleStar, onOpenCompany }) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
   const [sort, setSort] = useState({ key: "score", dir: -1 });
   const [query, setQuery] = useState("");
@@ -115,6 +115,7 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
           <table className="table screener-table">
             <thead>
               <tr>
+                <th className="star-cell" aria-label="Starred"></th>
                 <th className="sortable" onClick={() => toggleSort("ticker")}>Company{arrow("ticker")}</th>
                 <th className="sortable" onClick={() => toggleSort("score")}>Rules passed{arrow("score")}</th>
                 {COLUMNS.map((key) => (
@@ -128,6 +129,18 @@ export default function ScreenerView({ market, setMarket, rules, settings, onOpe
             <tbody>
               {sorted.slice(0, shown).map(({ company, metrics, verdict }) => (
                 <tr key={company.ticker} className="clickable-row" onClick={() => onOpenCompany(company.ticker)}>
+                  <td className="star-cell">
+                    <button
+                      className={`star-btn ${watchlist.has(company.ticker) ? "star-on" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStar(company.ticker);
+                      }}
+                      aria-label={`${watchlist.has(company.ticker) ? "Unstar" : "Star"} ${company.ticker}`}
+                    >
+                      {watchlist.has(company.ticker) ? "★" : "☆"}
+                    </button>
+                  </td>
                   <td>
                     <div className="mono bold">{company.ticker}</div>
                     <div className="cell-sub">{company.name}</div>
