@@ -76,6 +76,9 @@ zips. Prices come from one ~470 MB file, `stock_prices.parquet` from Defeat Beta
 | `npm run fetch:us:quick` | Just the watchlist in `scripts/markets/us.tickers.json` (a minute or two) |
 | `npm test` | Unit tests for parsers, metrics and rules |
 
+- **Foreign companies:** 20-F / 40-F filers (e.g. TSMC, ASML) are included, read from IFRS or US GAAP data and
+  converted to USD at each year-end rate (Defeat Beta `exchange_rate.parquet`). Their price ratios (P/E, P/B, intrinsic
+  value) are left blank, because one US-listed share (often an ADR) can stand for several home-market shares.
 - **SEC contact (required):** SEC refuses requests (HTTP 403) that don't name who is asking. Locally, set
   `SEC_USER_AGENT="Your Name you@example.com"` in `.env` (git-ignored). For the GitHub Action, add the same value as a
   repository variable: Settings → Secrets and variables → Actions → Variables → `SEC_USER_AGENT`.

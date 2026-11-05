@@ -72,6 +72,8 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
   }
 
   const currency = company.currency;
+  // Financial figures are in USD unless a foreign filer's currency couldn't be converted.
+  const finCurrency = company.financialCurrency ?? currency;
   // The detail file has the full history and the SEC filing behind each number.
   const years = detail.data?.fiscalYears ?? company.fiscalYears;
   const priceSource = prices.data?.source;
@@ -136,6 +138,18 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
         </div>
       </div>
 
+      {company.foreign && (
+        <p className="data-note">
+          Foreign company (files 20-F / 40-F annual reports).{" "}
+          {company.reportingCurrency &&
+            (company.financialCurrency
+              ? `Figures are in ${company.reportingCurrency}, as reported (no exchange rate was available). `
+              : `Figures were converted from ${company.reportingCurrency} to USD at each year-end exchange rate. `)}
+          Price-based ratios (P/E, P/B, intrinsic value) are not shown, because one US-listed share (often an ADR)
+          can represent several home-market shares.
+        </p>
+      )}
+
       <div className="company-grid">
         <section className="detail">
           <div className="section-title">
@@ -183,8 +197,8 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
             <BarChart data={years} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
               <CartesianGrid stroke="#1E2A42" strokeDasharray="3 3" />
               <XAxis dataKey="fiscalYear" tick={AXIS} />
-              <YAxis tick={AXIS} width={70} tickFormatter={(v) => formatMoney(v, currency)} />
-              <Tooltip {...TOOLTIP} formatter={(v) => formatMoney(v, currency)} cursor={{ fill: "#1E2A42" }} />
+              <YAxis tick={AXIS} width={70} tickFormatter={(v) => formatMoney(v, finCurrency)} />
+              <Tooltip {...TOOLTIP} formatter={(v) => formatMoney(v, finCurrency)} cursor={{ fill: "#1E2A42" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="revenue" name="Revenue" fill="#3FA9E5" />
               <Bar dataKey="netIncome" name="Net income" fill="#C9A227" />
@@ -212,7 +226,7 @@ export default function CompanyView({ market, ticker, rules, settings, onBack })
                   <td className="bold">{label}</td>
                   {years.map((y) => {
                     const value = derive ? derive(y) : y[field];
-                    const text = kind === "eps" ? formatMetric(value, "x") : formatMoney(value, currency);
+                    const text = kind === "eps" ? formatMetric(value, "x") : formatMoney(value, finCurrency);
                     // Derived rows add up several filed values, so they have no single source link.
                     const url = derive ? null : secFilingUrl(company.cik, y.accn?.[field]);
                     return (

@@ -197,7 +197,14 @@ export default function ScreenerView({
                     </td>
                     <td>
                       <div className="mono bold">{company.ticker}</div>
-                      <div className="cell-sub">{company.name}</div>
+                      <div className="cell-sub">
+                        {company.name}
+                        {company.foreign && (
+                          <span className="foreign-tag" title="Files 20-F / 40-F annual reports; price ratios not shown">
+                            foreign
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <ScoreBadge verdict={verdict} />

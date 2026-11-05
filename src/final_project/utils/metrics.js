@@ -90,7 +90,28 @@ export function intangiblesGoodwillOf(y) {
 
 const epsOf = (y) => (isNum(y.epsDiluted) ? y.epsDiluted : ratio(y.netIncome, y.dilutedShares));
 
+// Metrics that compare the share price with per-share figures from the filings.
+// Hidden for foreign filers: one US-listed share (often an ADR) can stand for
+// several home-market shares, so these would be misleading.
+const PRICE_RATIOS = [
+  "pe", "pe3", "pb", "grahamMultiplier", "marketCap", "dividendYield", "fcfYield",
+  "grahamNumber", "intrinsicValue", "marginOfSafety",
+];
+// Dollar amounts, hidden when a foreign filer's figures couldn't be converted to USD.
+const MONEY_METRICS = [
+  "revenue", "currentAssets", "currentLiabilities", "cash", "totalDebt", "equity", "intangiblesGoodwill",
+];
+
 export function computeMetrics(company, settings = DEFAULT_SETTINGS) {
+  const metrics = rawMetrics(company, settings);
+  if (company.foreign) for (const key of PRICE_RATIOS) metrics[key] = null;
+  if (company.financialCurrency && company.financialCurrency !== "USD") {
+    for (const key of [...PRICE_RATIOS, ...MONEY_METRICS]) metrics[key] = null;
+  }
+  return metrics;
+}
+
+function rawMetrics(company, settings) {
   const years = company.fiscalYears ?? [];
   const latest = years[years.length - 1] ?? {};
   const price = company.price?.last ?? null;

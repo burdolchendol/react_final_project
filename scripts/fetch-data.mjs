@@ -11,6 +11,7 @@ import { mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { MARKETS } from "./markets/index.mjs";
 import { mapPool } from "./lib/http.mjs";
+import { convertYearsToUsd } from "./lib/fx.mjs";
 import { INDEX_FIELDS, INDEX_YEARS, toRow, companyFile } from "../src/final_project/data/snapshotFormat.js";
 
 // Bulk downloads go here (git-ignored). Deleted after the run unless --keep-zips.
@@ -103,32 +104,63 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
 
   // 1. Fundamentals, one company at a time. Each company's full history goes
   //    straight to its own file; only the compact index row stays in memory.
-  //    Companies with no annual 10-K data (funds, SPACs, foreign filers) are skipped.
+  //    Companies with no annual report data (funds, SPACs, new listings) are skipped.
+  //    Companies reporting in another currency wait until exchange rates are loaded.
   const failures = [];
   const companies = [];
+  const nonUsd = [];
   let skipped = 0;
+
+  const add = (company, fundamentals, years, financialCurrency) => {
+    writeFileSync(new URL(companyFile(company.ticker), detailDir), JSON.stringify({ fiscalYears: years }));
+    companies.push({
+      ticker: company.ticker,
+      cik: fundamentals.cik,
+      name: fundamentals.name,
+      sector: fundamentals.sector,
+      exchange: fundamentals.exchange,
+      currency: market.currency,
+      // Foreign filers (20-F / 40-F): financials may be converted, and price ratios are not shown.
+      foreign: fundamentals.foreign || undefined,
+      reportingCurrency: fundamentals.currency !== "USD" ? fundamentals.currency : undefined,
+      financialCurrency: financialCurrency !== "USD" ? financialCurrency : undefined,
+      price: null,
+      years: years.slice(-INDEX_YEARS).map(toRow),
+    });
+  };
+
   try {
     for await (const { company, fundamentals } of fundamentalsFor(market, args, failures)) {
-      const years = fundamentals.fiscalYears;
-      if (!years.length) {
-        skipped++;
-        continue;
-      }
-      writeFileSync(new URL(companyFile(company.ticker), detailDir), JSON.stringify({ fiscalYears: years }));
-      companies.push({
-        ticker: company.ticker,
-        cik: fundamentals.cik,
-        name: fundamentals.name,
-        sector: fundamentals.sector,
-        exchange: fundamentals.exchange,
-        currency: market.currency,
-        price: null,
-        years: years.slice(-INDEX_YEARS).map(toRow),
-      });
+      if (!fundamentals.fiscalYears.length) skipped++;
+      else if (fundamentals.currency && fundamentals.currency !== "USD") nonUsd.push({ company, fundamentals });
+      else add(company, fundamentals, fundamentals.fiscalYears, "USD");
     }
   } catch (err) {
     throw isSec403(err) ? sec403Help() : err;
   }
+
+  if (nonUsd.length) {
+    let rates = new Map();
+    try {
+      rates = await market.fxRates(
+        nonUsd.map((x) => x.fundamentals.currency),
+        { fileDir: args.zipDir, cacheDir: CACHE_DIR }
+      );
+    } catch (err) {
+      console.error(`Exchange rates unavailable: ${err.message}`);
+    }
+    let converted = 0;
+    for (const { company, fundamentals } of nonUsd) {
+      const usd = convertYearsToUsd(fundamentals.fiscalYears, fundamentals.currency, rates.get(fundamentals.currency));
+      if (usd) converted++;
+      // Without a rate, keep the reported currency; the app then hides money columns for it.
+      add(company, fundamentals, usd ?? fundamentals.fiscalYears, usd ? "USD" : fundamentals.currency);
+    }
+    console.log(`Foreign currencies: ${converted}/${nonUsd.length} companies converted to USD`);
+  }
+  const foreignCount = companies.filter((c) => c.foreign).length;
+  if (foreignCount) console.log(`Foreign filers (20-F / 40-F): ${foreignCount}`);
+
   console.log(`Fundamentals: ${companies.length} companies (${skipped} without annual reports skipped)`);
   if (!companies.length) throw new Error("No company data fetched; keeping the previous snapshot.");
 

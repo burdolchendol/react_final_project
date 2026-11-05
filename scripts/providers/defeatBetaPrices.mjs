@@ -82,3 +82,44 @@ export async function fetchPricesBulk(symbols, { fileDir, cacheDir, keepFiles = 
   for (const entry of out.values()) [entry.asOf, entry.last] = entry.history[entry.history.length - 1];
   return out;
 }
+
+const FX_FILE = "exchange_rate.parquet";
+
+// Exchange rates from the same dataset (Yahoo symbols like "EUR=X" = euros per
+// US dollar). Small file (~3 MB). Returns Map(currency -> ascending [[date, rate]]).
+export async function fetchFxRates(currencies, { fileDir, cacheDir } = {}) {
+  const wanted = [...new Set(currencies)].filter((c) => c && c !== "USD");
+  const out = new Map();
+  if (!wanted.length) return out;
+
+  let file = fileDir && join(fileDir, FX_FILE);
+  let ours = false;
+  if (!file || !existsSync(file)) {
+    mkdirSync(cacheDir, { recursive: true });
+    file = join(cacheDir, FX_FILE);
+    ours = true;
+    await downloadToFile(`${DATASET}/data/US/${FX_FILE}`, file);
+  }
+  const instance = await DuckDBInstance.create(":memory:", { memory_limit: "512MB", threads: "1" });
+  const db = await instance.connect();
+  try {
+    const symbols = wanted.map((c) => sqlString(`${c}=X`)).join(",");
+    const result = await db.stream(`
+      SELECT symbol, report_date, CAST(close AS DOUBLE)
+      FROM read_parquet(${sqlString(file)})
+      WHERE symbol IN (${symbols}) AND close > 0
+      ORDER BY symbol, report_date`);
+    for (let chunk = await result.fetchChunk(); chunk && chunk.rowCount > 0; chunk = await result.fetchChunk()) {
+      for (const [symbol, date, rate] of chunk.getRows()) {
+        const currency = symbol.replace("=X", "");
+        if (!out.has(currency)) out.set(currency, []);
+        out.get(currency).push([String(date).slice(0, 10), rate]);
+      }
+    }
+  } finally {
+    db.closeSync();
+    instance.closeSync();
+    if (ours) rmSync(file, { force: true });
+  }
+  return out;
+}

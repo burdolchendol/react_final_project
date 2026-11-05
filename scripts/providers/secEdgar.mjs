@@ -22,13 +22,15 @@ export function secUserAgent() {
 
 const headers = () => ({ "User-Agent": secUserAgent(), Accept: "application/json", "Accept-Encoding": "gzip, deflate" });
 
-// Each normalized field lists XBRL concepts in priority order. Companies switch
-// tags over the years (e.g. Revenues -> RevenueFromContractWithCustomer...), so
-// values are merged across concepts per fiscal year.
+// Each normalized field lists XBRL concepts in priority order: `concepts` for
+// US GAAP filers (10-K), `ifrs` for foreign filers using IFRS (20-F / 40-F).
+// Companies switch tags over the years (e.g. Revenues -> RevenueFromContractWithCustomer...),
+// so values are merged across concepts per fiscal year. `unit` is "money"
+// (the company's reporting currency), "perShare" or "shares".
 export const FIELD_CONCEPTS = {
   revenue: {
     kind: "duration",
-    unit: "USD",
+    unit: "money",
     concepts: [
       "Revenues",
       "RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -36,78 +38,115 @@ export const FIELD_CONCEPTS = {
       "SalesRevenueNet",
       "SalesRevenueGoodsNet",
     ],
+    ifrs: ["Revenue", "RevenueFromContractsWithCustomers"],
   },
-  netIncome: { kind: "duration", unit: "USD", concepts: ["NetIncomeLoss", "ProfitLoss"] },
+  netIncome: {
+    kind: "duration",
+    unit: "money",
+    concepts: ["NetIncomeLoss", "ProfitLoss"],
+    ifrs: ["ProfitLossAttributableToOwnersOfParent", "ProfitLoss"],
+  },
   epsDiluted: {
     kind: "duration",
-    unit: "USD/shares",
+    unit: "perShare",
     concepts: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "EarningsPerShareBasic"],
+    ifrs: ["DilutedEarningsLossPerShare", "BasicEarningsLossPerShare"],
   },
   dilutedShares: {
     kind: "duration",
     unit: "shares",
     concepts: ["WeightedAverageNumberOfDilutedSharesOutstanding", "WeightedAverageNumberOfSharesOutstandingBasic"],
+    ifrs: ["AdjustedWeightedAverageShares", "WeightedAverageShares"],
   },
-  totalAssets: { kind: "instant", unit: "USD", concepts: ["Assets"] },
-  totalLiabilities: { kind: "instant", unit: "USD", concepts: ["Liabilities"] },
-  currentAssets: { kind: "instant", unit: "USD", concepts: ["AssetsCurrent"] },
-  currentLiabilities: { kind: "instant", unit: "USD", concepts: ["LiabilitiesCurrent"] },
+  totalAssets: { kind: "instant", unit: "money", concepts: ["Assets"], ifrs: ["Assets"] },
+  totalLiabilities: { kind: "instant", unit: "money", concepts: ["Liabilities"], ifrs: ["Liabilities"] },
+  currentAssets: { kind: "instant", unit: "money", concepts: ["AssetsCurrent"], ifrs: ["CurrentAssets"] },
+  currentLiabilities: { kind: "instant", unit: "money", concepts: ["LiabilitiesCurrent"], ifrs: ["CurrentLiabilities"] },
   equity: {
     kind: "instant",
-    unit: "USD",
+    unit: "money",
     concepts: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+    ifrs: ["EquityAttributableToOwnersOfParent", "Equity"],
   },
   longTermDebt: {
     kind: "instant",
-    unit: "USD",
+    unit: "money",
     concepts: ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermDebtAndCapitalLeaseObligations"],
+    ifrs: ["NoncurrentPortionOfNoncurrentBorrowings", "LongtermBorrowings", "NoncurrentFinancialLiabilities"],
   },
   // Total debt = long-term debt (non-current) + debt due within a year. Filers tag
-  // the short-term part either as one DebtCurrent total or as its pieces.
-  debtCurrent: { kind: "instant", unit: "USD", concepts: ["DebtCurrent"] },
+  // the short-term part either as one total or as its pieces.
+  debtCurrent: {
+    kind: "instant",
+    unit: "money",
+    concepts: ["DebtCurrent"],
+    ifrs: ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings"],
+  },
   longTermDebtCurrent: {
     kind: "instant",
-    unit: "USD",
+    unit: "money",
     concepts: ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent"],
+    ifrs: ["CurrentPortionOfNoncurrentBorrowings", "CurrentPortionOfLongtermBorrowings"],
   },
-  shortTermBorrowings: { kind: "instant", unit: "USD", concepts: ["ShortTermBorrowings", "CommercialPaper"] },
+  shortTermBorrowings: {
+    kind: "instant",
+    unit: "money",
+    concepts: ["ShortTermBorrowings", "CommercialPaper"],
+    ifrs: ["ShorttermBorrowings"],
+  },
   cash: {
     kind: "instant",
-    unit: "USD",
+    unit: "money",
     concepts: [
       "CashAndCashEquivalentsAtCarryingValue",
       "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents",
       "CashAndDueFromBanks",
       "Cash",
     ],
+    ifrs: ["CashAndCashEquivalents", "Cash"],
   },
-  goodwill: { kind: "instant", unit: "USD", concepts: ["Goodwill"] },
+  goodwill: { kind: "instant", unit: "money", concepts: ["Goodwill"], ifrs: ["Goodwill"] },
   intangibles: {
     kind: "instant",
-    unit: "USD",
+    unit: "money",
     concepts: ["IntangibleAssetsNetExcludingGoodwill", "FiniteLivedIntangibleAssetsNet"],
+    ifrs: ["IntangibleAssetsOtherThanGoodwill"],
   },
   // Some filers report one combined figure instead of the two above.
-  intangiblesInclGoodwill: { kind: "instant", unit: "USD", concepts: ["IntangibleAssetsNetIncludingGoodwill"] },
+  intangiblesInclGoodwill: {
+    kind: "instant",
+    unit: "money",
+    concepts: ["IntangibleAssetsNetIncludingGoodwill"],
+    ifrs: ["IntangibleAssetsAndGoodwill"],
+  },
   operatingCashFlow: {
     kind: "duration",
-    unit: "USD",
+    unit: "money",
     concepts: ["NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
+    ifrs: ["CashFlowsFromUsedInOperatingActivities"],
   },
-  capex: { kind: "duration", unit: "USD", concepts: ["PaymentsToAcquirePropertyPlantAndEquipment"] },
+  capex: {
+    kind: "duration",
+    unit: "money",
+    concepts: ["PaymentsToAcquirePropertyPlantAndEquipment"],
+    ifrs: ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities", "PurchaseOfPropertyPlantAndEquipment"],
+  },
   dividendsPerShare: {
     kind: "duration",
-    unit: "USD/shares",
+    unit: "perShare",
     concepts: ["CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"],
+    ifrs: ["DividendsRecognisedAsDistributionsToOwnersPerShare"],
   },
   dividendsPaid: {
     kind: "duration",
-    unit: "USD",
+    unit: "money",
     concepts: ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"],
+    ifrs: ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid", "DividendsPaidToEquityHoldersOfParentClassifiedAsFinancingActivities"],
   },
 };
 
-const ANNUAL_FORMS = new Set(["10-K", "10-K/A", "10-KT"]);
+// 10-K for US companies; 20-F and 40-F are the annual reports of foreign companies.
+const ANNUAL_FORMS = new Set(["10-K", "10-K/A", "10-KT", "20-F", "20-F/A", "40-F", "40-F/A"]);
 const MAX_YEARS = 15;
 
 const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / 86_400_000;
@@ -129,10 +168,13 @@ function annualFacts(entries, kind) {
   return byEnd;
 }
 
-function fieldSeries(usGaap, { kind, unit, concepts }) {
+const unitName = (unit, currency) =>
+  unit === "money" ? currency : unit === "perShare" ? `${currency}/shares` : "shares";
+
+function fieldSeries(facts, concepts, kind, unit) {
   const merged = new Map();
-  for (const concept of concepts) {
-    const entries = usGaap[concept]?.units?.[unit];
+  for (const concept of concepts ?? []) {
+    const entries = facts[concept]?.units?.[unit];
     if (!entries) continue;
     for (const [end, fact] of annualFacts(entries, kind)) {
       if (!merged.has(end)) merged.set(end, fact);
@@ -141,11 +183,40 @@ function fieldSeries(usGaap, { kind, unit, concepts }) {
   return merged;
 }
 
-// Pure transform: SEC companyfacts JSON -> ascending list of fiscal years.
-export function normalizeCompanyFacts(companyFacts) {
-  const usGaap = companyFacts?.facts?.["us-gaap"] ?? {};
+// Which taxonomy and reporting currency a filer uses, and whether it files the
+// foreign annual reports (20-F / 40-F). US GAAP wins when both are present.
+export function factsProfile(companyFacts) {
+  const all = companyFacts?.facts ?? {};
+  const hasAnnual = (ns) =>
+    Object.values(all[ns]?.Assets?.units ?? {}).some((entries) => entries.some((e) => ANNUAL_FORMS.has(e.form)));
+  const taxonomy = hasAnnual("us-gaap") ? "us-gaap" : hasAnnual("ifrs-full") ? "ifrs-full" : "us-gaap";
+
+  // Reporting currency = the unit with the most annual Assets / Revenue facts.
+  const counts = new Map();
+  let foreignForm = false;
+  for (const concept of ["Assets", ...FIELD_CONCEPTS.revenue.concepts, ...FIELD_CONCEPTS.revenue.ifrs]) {
+    for (const [unit, entries] of Object.entries(all[taxonomy]?.[concept]?.units ?? {})) {
+      for (const e of entries) {
+        if (!ANNUAL_FORMS.has(e.form)) continue;
+        counts.set(unit, (counts.get(unit) ?? 0) + 1);
+        if (e.form.startsWith("20-F") || e.form.startsWith("40-F")) foreignForm = true;
+      }
+    }
+  }
+  const currency = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+  return { taxonomy, currency, foreign: foreignForm };
+}
+
+// Pure transform: SEC companyfacts JSON -> ascending list of fiscal years, in the
+// company's reporting currency (see factsProfile).
+export function normalizeCompanyFacts(companyFacts, profile = factsProfile(companyFacts)) {
+  const facts = companyFacts?.facts?.[profile.taxonomy] ?? {};
+  const listKey = profile.taxonomy === "ifrs-full" ? "ifrs" : "concepts";
   const series = Object.fromEntries(
-    Object.entries(FIELD_CONCEPTS).map(([field, spec]) => [field, fieldSeries(usGaap, spec)])
+    Object.entries(FIELD_CONCEPTS).map(([field, spec]) => [
+      field,
+      fieldSeries(facts, spec[listKey], spec.kind, unitName(spec.unit, profile.currency)),
+    ])
   );
 
   // A fiscal year exists wherever we have annual revenue or net income.
@@ -222,12 +293,15 @@ export async function fetchFundamentals(company) {
     fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, { headers: headers() }),
     fetchJson(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: headers() }).catch(() => null),
   ]);
+  const profile = factsProfile(facts);
   return {
     cik,
     name: submissions?.name || facts.entityName || company.name,
     sector: submissions?.sicDescription || null,
     exchange: submissions?.exchanges?.[0] || company.exchange || null,
-    fiscalYears: normalizeCompanyFacts(facts),
+    currency: profile.currency,
+    foreign: profile.foreign,
+    fiscalYears: normalizeCompanyFacts(facts, profile),
     source: sourceFor(cik),
   };
 }
@@ -302,6 +376,7 @@ async function* readBulk(companies, { cacheDir, zipDir, withSectors, downloaded 
   for await (const [name, json] of readZipEntries(file, (n) => byFile.has(n))) {
     const c = byFile.get(name);
     if (++done % 1000 === 0) console.log(`Financials: ${done}/${companies.length}`);
+    const profile = factsProfile(json);
     yield {
       company: c,
       fundamentals: {
@@ -309,7 +384,9 @@ async function* readBulk(companies, { cacheDir, zipDir, withSectors, downloaded 
         name: json.entityName || c.name,
         sector: sectors.get(name) ?? null,
         exchange: c.exchange ?? null,
-        fiscalYears: normalizeCompanyFacts(json),
+        currency: profile.currency,
+        foreign: profile.foreign,
+        fiscalYears: normalizeCompanyFacts(json, profile),
         source: sourceFor(c.cik),
       },
     };

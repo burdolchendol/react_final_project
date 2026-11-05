@@ -27,6 +27,8 @@ export const MARKETS = {
     // Price sources in order. Bulk: one file with every symbol (Defeat Beta on
     // Hugging Face). Then, for anything it lacks, Yahoo 20 symbols per request,
     // then per-ticker sources. --no-yahoo stops after the bulk file.
+    // Exchange rates for companies that report in another currency.
+    fxRates: defeatBeta.fetchFxRates,
     priceBulk: { fetch: defeatBeta.fetchPricesBulk, symbol: (t) => t.replace(".", "-") },
     priceBatch: { fetch: yahoo.fetchPricesBatch, size: yahoo.SPARK_BATCH, symbol: (t) => t.replace(".", "-") },
     priceSources: [
