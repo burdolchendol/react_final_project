@@ -1,5 +1,5 @@
 // Builds the static data snapshot the app reads (public/data/<market>/).
-//   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips + batched prices, ~15 min)
+//   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips + Defeat Beta price file)
 //   node scripts/fetch-data.mjs --market us --no-prices          same, financials only (minutes once zips are cached)
 //   node scripts/fetch-data.mjs --market us --zip-dir ~/Downloads use companyfacts.zip / submissions.zip you downloaded
 //   node scripts/fetch-data.mjs --market us --universe list      the watchlist in scripts/markets/us.tickers.json
@@ -17,12 +17,14 @@ import { INDEX_FIELDS, INDEX_YEARS, toRow, companyFile } from "../src/final_proj
 const CACHE_DIR = fileURLToPath(new URL("../.cache/sec/", import.meta.url));
 
 function parseArgs(argv) {
-  const args = { market: "us", universe: "all", tickers: null, zipDir: process.env.SEC_ZIP_DIR || null, prices: true, sectors: true, keepZips: false };
+  const args = { market: "us", universe: "all", tickers: null, zipDir: process.env.SEC_ZIP_DIR || null, prices: true, yahoo: true, sectors: true, keepZips: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--market") args.market = argv[++i];
     else if (argv[i] === "--universe") args.universe = argv[++i];
-    else if (argv[i] === "--zip-dir") args.zipDir = argv[++i]; // folder with companyfacts.zip / submissions.zip you downloaded
+    // Folder with files you downloaded yourself: companyfacts.zip, submissions.zip, stock_prices.parquet.
+    else if (argv[i] === "--zip-dir") args.zipDir = argv[++i];
     else if (argv[i] === "--no-prices") args.prices = false;
+    else if (argv[i] === "--no-yahoo") args.yahoo = false; // only use the bulk price file
     else if (argv[i] === "--no-sectors") args.sectors = false; // skip submissions.zip (industry names)
     else if (argv[i] === "--keep-zips") args.keepZips = true; // keep the ~2.5 GB of SEC zips for a rerun today
     else if (argv[i] === "--tickers") {
@@ -130,7 +132,8 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
   console.log(`Fundamentals: ${companies.length} companies (${skipped} without annual reports skipped)`);
   if (!companies.length) throw new Error("No company data fetched; keeping the previous snapshot.");
 
-  // 2. Prices: batched requests first (fast), then one-by-one for whatever they missed.
+  // 2. Prices: one bulk file first, then batched requests, then one by one, each
+  //    only for whatever the previous step missed.
   let priced = 0;
   if (args.prices) {
     const save = (c, prices) => {
@@ -142,10 +145,31 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
     };
 
     let missing = companies;
-    if (market.priceBatch) {
+    // The bulk file is ~470 MB, worth it only for the full universe.
+    if (market.priceBulk && args.universe === "all") {
+      const { fetch, symbol } = market.priceBulk;
+      try {
+        const found = await fetch(companies.map((c) => symbol(c.ticker)), {
+          fileDir: args.zipDir,
+          cacheDir: CACHE_DIR,
+          keepFiles: args.keepZips,
+        });
+        for (const c of companies) {
+          const p = found.get(symbol(c.ticker));
+          if (p) save(c, p);
+        }
+      } catch (err) {
+        console.error(`Bulk prices failed: ${err.message}`);
+      }
+      missing = companies.filter((c) => !c.price);
+      console.log(`Bulk prices: ${priced}/${companies.length}; ${missing.length} missing`);
+    }
+    if (!args.yahoo) missing = [];
+
+    if (market.priceBatch && missing.length) {
       const { fetch, size, symbol } = market.priceBatch;
       const batches = [];
-      for (let i = 0; i < companies.length; i += size) batches.push(companies.slice(i, i + size));
+      for (let i = 0; i < missing.length; i += size) batches.push(missing.slice(i, i + size));
       let done = 0;
       await mapPool(batches, 2, async (batch) => {
         try {
@@ -159,7 +183,7 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
         }
         if (++done % 50 === 0) console.log(`Prices: ${done}/${batches.length} batches`);
       });
-      missing = companies.filter((c) => !c.price);
+      missing = missing.filter((c) => !c.price);
       console.log(`Batched prices: ${priced}/${companies.length}; ${missing.length} left to try one by one`);
       if (missing.length > 500) {
         console.warn("Many prices are missing from the batch results; the one-by-one fallback will be slow.");

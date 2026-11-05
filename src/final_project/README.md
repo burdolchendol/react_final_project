@@ -44,7 +44,7 @@ The **Screener** page scores real US companies against your own rules, using fre
 | What | Source | Key needed? |
 | --- | --- | --- |
 | Annual financials (revenue, EPS, balance sheet, cash flow, dividends) | [SEC EDGAR XBRL API](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) | No |
-| Daily closing prices (5 years) | Yahoo Finance chart endpoint, with Stooq as a fallback | No |
+| Prices (5 years, weekly closes) | [Defeat Beta](https://huggingface.co/datasets/defeatbeta/yahoo-finance-data) bulk file on Hugging Face (ODC-BY, Yahoo Finance data, updated about daily); Yahoo / Stooq only for symbols it lacks | No |
 
 GitHub Pages can't call these APIs from the browser (no CORS, and SEC needs a User-Agent header), so the app reads a
 **static snapshot** in `public/data/<market>/` (git-ignored, never committed). The *Refresh market data* GitHub Action
@@ -62,15 +62,17 @@ All company data comes from the zips; the only other SEC request is one small ti
 `fetch:us` downloads SEC's two nightly bulk files (`companyfacts.zip` and `submissions.zip`, about 2.5 GB together),
 reads each company's JSON straight out of the zips one at a time (nothing is extracted, memory stays low), writes a
 compact `index.json` for the screener plus one small file per company that loads only when you open it, then deletes the
-zips. Prices come from Yahoo 20 companies per request (about 300 requests, paced at 2 a second), so they take around
-5 minutes; anything a batch misses is retried one by one. A failed run leaves the previous snapshot in place.
+zips. Prices come from one ~470 MB file, `stock_prices.parquet` from Defeat Beta, read with DuckDB (memory capped at
+1 GB, 2 threads) and deleted afterwards. Only symbols missing from it are asked from Yahoo, 20 per request
+(`--no-yahoo` skips that). A failed run leaves the previous snapshot in place.
 
 | Command | What it does |
 | --- | --- |
 | `npm run fetch:us` | All listed companies, with prices |
 | `npm run fetch:us -- --no-prices` | All companies, financials only (fast, but price-based ratios are blank) |
-| `npm run fetch:us -- --zip-dir /path/to/folder` | Use `companyfacts.zip` / `submissions.zip` you already downloaded (or set `SEC_ZIP_DIR` in `.env`); they are never deleted |
-| `npm run fetch:us -- --keep-zips` | Keep the zips in `.cache/sec/` so another run today skips the download |
+| `npm run fetch:us -- --zip-dir /path/to/folder` | Use `companyfacts.zip`, `submissions.zip` and/or `stock_prices.parquet` you already downloaded (or set `SEC_ZIP_DIR` in `.env`); they are never deleted |
+| `npm run fetch:us -- --no-yahoo` | Prices only from the Defeat Beta file; no Yahoo requests at all |
+| `npm run fetch:us -- --keep-zips` | Keep the downloads in `.cache/sec/` so another run today skips them |
 | `npm run fetch:us:quick` | Just the watchlist in `scripts/markets/us.tickers.json` (a minute or two) |
 | `npm test` | Unit tests for parsers, metrics and rules |
 

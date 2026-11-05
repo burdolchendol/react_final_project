@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import * as secEdgar from "../providers/secEdgar.mjs";
 import * as yahoo from "../providers/yahooPrices.mjs";
 import * as stooq from "../providers/stooqPrices.mjs";
+import * as defeatBeta from "../providers/defeatBetaPrices.mjs";
 
 const readTickers = (file) => JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
 
@@ -23,9 +24,11 @@ export const MARKETS = {
     watchlist: () => readTickers("./us.tickers.json"),
     resolveTickers: secEdgar.resolveTickers,
     fundamentals: secEdgar.fetchFundamentals,
-    // Many symbols per request; anything it misses falls back to priceSources.
+    // Price sources in order. Bulk: one file with every symbol (Defeat Beta on
+    // Hugging Face). Then, for anything it lacks, Yahoo 20 symbols per request,
+    // then per-ticker sources. --no-yahoo stops after the bulk file.
+    priceBulk: { fetch: defeatBeta.fetchPricesBulk, symbol: (t) => t.replace(".", "-") },
     priceBatch: { fetch: yahoo.fetchPricesBatch, size: yahoo.SPARK_BATCH, symbol: (t) => t.replace(".", "-") },
-    // Per-ticker sources, tried in order until one succeeds.
     priceSources: [
       { fetch: yahoo.fetchPrices, symbol: (t) => t.replace(".", "-") },
       { fetch: stooq.fetchPrices, symbol: (t) => `${t.toLowerCase()}.us` },
