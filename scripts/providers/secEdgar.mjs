@@ -158,6 +158,7 @@ const sourceFor = (cik) => ({
 
 let companyListPromise;
 // Every ticker SEC knows, with CIK and exchange: [{ ticker, cik, name, exchange }].
+// One small file (~1 MB), not a per-company call; it maps tickers to the CIKs in the zips.
 function secCompanyList() {
   companyListPromise ??= fetchJson("https://www.sec.gov/files/company_tickers_exchange.json", {
     headers: headers(),
@@ -204,25 +205,34 @@ export async function fetchFundamentals(company) {
   };
 }
 
-const BULK_FILES = {
-  facts: "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip",
-  submissions: "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip",
+export const BULK_FILES = {
+  "companyfacts.zip": "https://www.sec.gov/Archives/edgar/daily-index/xbrl/companyfacts.zip",
+  "submissions.zip": "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip",
 };
 // SEC rebuilds the zips nightly, so a download younger than this is reused.
 const MAX_AGE_MS = 20 * 60 * 60 * 1000;
 
-// Downloads a bulk zip into cacheDir (once a day at most) and returns its path.
-async function cachedZip(kind, cacheDir) {
+// Returns { file, ours }. A zip you downloaded yourself into zipDir is used as is
+// (and never deleted); otherwise it is downloaded into cacheDir, once a day at most.
+async function bulkZip(name, { zipDir, cacheDir }) {
+  if (zipDir && existsSync(join(zipDir, name))) {
+    console.log(`Using your ${join(zipDir, name)}`);
+    return { file: join(zipDir, name), ours: false };
+  }
+  return { file: await cachedZip(name, cacheDir), ours: true };
+}
+
+async function cachedZip(name, cacheDir) {
   mkdirSync(cacheDir, { recursive: true });
-  const file = join(cacheDir, `${kind}.zip`);
+  const file = join(cacheDir, name);
   if (existsSync(file) && Date.now() - statSync(file).mtimeMs < MAX_AGE_MS) {
     console.log(`Using cached ${file}`);
     return file;
   }
-  console.log(`Downloading ${BULK_FILES[kind]} (over 1 GB, this takes a while) …`);
+  console.log(`Downloading ${BULK_FILES[name]} (over 1 GB, this takes a while) …`);
   const partial = `${file}.part`;
   try {
-    await downloadToFile(BULK_FILES[kind], partial, { headers: headers() });
+    await downloadToFile(BULK_FILES[name], partial, { headers: headers() });
   } catch (err) {
     rmSync(partial, { force: true });
     throw err;
@@ -231,36 +241,36 @@ async function cachedZip(kind, cacheDir) {
   return file;
 }
 
-// Bulk path: SEC publishes every filer's data nightly as two zips. Two downloads
-// instead of thousands of API calls. The JSON is read straight out of the zip,
-// one company at a time, so nothing has to be extracted to disk.
+// Bulk path: SEC publishes every filer's data nightly as two zips. All company
+// data is read from them; no per-company API calls are made. The JSON is read
+// straight out of the zip, one company at a time, so nothing is extracted to disk.
 // Yields { company, fundamentals } for each requested company found.
-export async function* bulkFundamentals(companies, { cacheDir, factsZip, withSectors = true, keepZips = true } = {}) {
+export async function* bulkFundamentals(companies, { cacheDir, zipDir, withSectors = true, keepZips = true } = {}) {
   const downloaded = [];
   try {
-    yield* readBulk(companies, { cacheDir, factsZip, withSectors, downloaded });
+    yield* readBulk(companies, { cacheDir, zipDir, withSectors, downloaded });
   } finally {
     // The zips are large; don't leave them behind unless asked to.
     if (!keepZips) for (const f of downloaded) rmSync(f, { force: true });
   }
 }
 
-async function* readBulk(companies, { cacheDir, factsZip, withSectors, downloaded }) {
+async function* readBulk(companies, { cacheDir, zipDir, withSectors, downloaded }) {
   const byFile = new Map(companies.map((c) => [`CIK${c.cik}.json`, c]));
 
   // Industry (SIC description) comes from submissions.zip.
   const sectors = new Map();
   if (withSectors) {
-    const file = await cachedZip("submissions", cacheDir);
-    downloaded.push(file);
+    const { file, ours } = await bulkZip("submissions.zip", { zipDir, cacheDir });
+    if (ours) downloaded.push(file);
     for await (const [name, json] of readZipEntries(file, (n) => byFile.has(n))) {
       if (json.sicDescription) sectors.set(name, json.sicDescription);
     }
     console.log(`Industries found for ${sectors.size} companies`);
   }
 
-  const file = factsZip ?? (await cachedZip("facts", cacheDir));
-  if (!factsZip) downloaded.push(file);
+  const { file, ours } = await bulkZip("companyfacts.zip", { zipDir, cacheDir });
+  if (ours) downloaded.push(file);
   let done = 0;
   for await (const [name, json] of readZipEntries(file, (n) => byFile.has(n))) {
     const c = byFile.get(name);

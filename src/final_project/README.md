@@ -58,6 +58,7 @@ npm run fetch:us            # every NYSE / Nasdaq / Cboe company (~6,000)
 npm run dev                 # open the Screener
 ```
 
+All company data comes from the zips; the only other SEC request is one small ticker list that maps tickers to companies.
 `fetch:us` downloads SEC's two nightly bulk files (`companyfacts.zip` and `submissions.zip`, about 2.5 GB together),
 reads each company's JSON straight out of the zips one at a time (nothing is extracted, memory stays low), writes a
 compact `index.json` for the screener plus one small file per company that loads only when you open it, then deletes the
@@ -68,6 +69,7 @@ zips. Prices come from Yahoo 20 companies per request (about 300 requests, paced
 | --- | --- |
 | `npm run fetch:us` | All listed companies, with prices |
 | `npm run fetch:us -- --no-prices` | All companies, financials only (fast, but price-based ratios are blank) |
+| `npm run fetch:us -- --zip-dir /path/to/folder` | Use `companyfacts.zip` / `submissions.zip` you already downloaded (or set `SEC_ZIP_DIR` in `.env`); they are never deleted |
 | `npm run fetch:us -- --keep-zips` | Keep the zips in `.cache/sec/` so another run today skips the download |
 | `npm run fetch:us:quick` | Just the watchlist in `scripts/markets/us.tickers.json` (a minute or two) |
 | `npm test` | Unit tests for parsers, metrics and rules |

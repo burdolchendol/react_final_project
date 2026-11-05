@@ -1,6 +1,7 @@
 // Builds the static data snapshot the app reads (public/data/<market>/).
 //   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips + batched prices, ~15 min)
 //   node scripts/fetch-data.mjs --market us --no-prices          same, financials only (minutes once zips are cached)
+//   node scripts/fetch-data.mjs --market us --zip-dir ~/Downloads use companyfacts.zip / submissions.zip you downloaded
 //   node scripts/fetch-data.mjs --market us --universe list      the watchlist in scripts/markets/us.tickers.json
 //   node scripts/fetch-data.mjs --market us --tickers AAPL,KO    just these
 // Run by .github/workflows/refresh-data.yml on a schedule, or locally.
@@ -16,11 +17,11 @@ import { INDEX_FIELDS, INDEX_YEARS, toRow, companyFile } from "../src/final_proj
 const CACHE_DIR = fileURLToPath(new URL("../.cache/sec/", import.meta.url));
 
 function parseArgs(argv) {
-  const args = { market: "us", universe: "all", tickers: null, zip: null, prices: true, sectors: true, keepZips: false };
+  const args = { market: "us", universe: "all", tickers: null, zipDir: process.env.SEC_ZIP_DIR || null, prices: true, sectors: true, keepZips: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--market") args.market = argv[++i];
     else if (argv[i] === "--universe") args.universe = argv[++i];
-    else if (argv[i] === "--zip") args.zip = argv[++i]; // use a companyfacts.zip you downloaded yourself
+    else if (argv[i] === "--zip-dir") args.zipDir = argv[++i]; // folder with companyfacts.zip / submissions.zip you downloaded
     else if (argv[i] === "--no-prices") args.prices = false;
     else if (argv[i] === "--no-sectors") args.sectors = false; // skip submissions.zip (industry names)
     else if (argv[i] === "--keep-zips") args.keepZips = true; // keep the ~2.5 GB of SEC zips for a rerun today
@@ -56,7 +57,7 @@ async function* fundamentalsFor(market, args, failures) {
   if (args.universe === "all") {
     const companies = await market.listAll();
     console.log(`${companies.length} listed companies`);
-    yield* market.bulkFundamentals(companies, { cacheDir: CACHE_DIR, factsZip: args.zip, withSectors: args.sectors, keepZips: args.keepZips });
+    yield* market.bulkFundamentals(companies, { cacheDir: CACHE_DIR, zipDir: args.zipDir, withSectors: args.sectors, keepZips: args.keepZips });
     return;
   }
   const companies = await market.resolveTickers(args.tickers ?? market.watchlist());

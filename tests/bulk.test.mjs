@@ -5,7 +5,7 @@ import { bulkFundamentals } from "../scripts/providers/secEdgar.mjs";
 import { mapPool } from "../scripts/lib/http.mjs";
 import { toRow, fromRow, companyFile } from "../src/final_project/data/snapshotFormat.js";
 
-const zip = fileURLToPath(new URL("./fixtures/companyfacts-sample.zip", import.meta.url));
+const zipDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
 test("bulkFundamentals reads only the requested companies straight from the zip", async () => {
   const companies = [
@@ -13,12 +13,18 @@ test("bulkFundamentals reads only the requested companies straight from the zip"
     { ticker: "BAD", cik: "0000000003", name: "Broken", exchange: "Nasdaq" },
   ];
   const out = [];
-  for await (const item of bulkFundamentals(companies, { factsZip: zip, withSectors: false })) out.push(item);
+  for await (const item of bulkFundamentals(companies, { zipDir, withSectors: false, keepZips: false })) out.push(item);
   // CIK 2 wasn't asked for; CIK 3 is malformed and skipped.
   assert.equal(out.length, 1);
   assert.equal(out[0].company.ticker, "TST");
   assert.equal(out[0].fundamentals.name, "Test Corp");
   assert.deepEqual(out[0].fundamentals.fiscalYears.map((y) => [y.revenue, y.netIncome]), [[100, 10]]);
+});
+
+test("a zip the user supplied is never deleted", async () => {
+  const { existsSync } = await import("node:fs");
+  for await (const _ of bulkFundamentals([], { zipDir, withSectors: false, keepZips: false })) void _;
+  assert.ok(existsSync(`${zipDir}/companyfacts.zip`));
 });
 
 test("index rows round-trip", () => {
