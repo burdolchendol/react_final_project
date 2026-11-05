@@ -23,7 +23,9 @@ export const MARKETS = {
     watchlist: () => readTickers("./us.tickers.json"),
     resolveTickers: secEdgar.resolveTickers,
     fundamentals: secEdgar.fetchFundamentals,
-    // Tried in order until one succeeds.
+    // Many symbols per request; anything it misses falls back to priceSources.
+    priceBatch: { fetch: yahoo.fetchPricesBatch, size: yahoo.SPARK_BATCH, symbol: (t) => t.replace(".", "-") },
+    // Per-ticker sources, tried in order until one succeeds.
     priceSources: [
       { fetch: yahoo.fetchPrices, symbol: (t) => t.replace(".", "-") },
       { fetch: stooq.fetchPrices, symbol: (t) => `${t.toLowerCase()}.us` },

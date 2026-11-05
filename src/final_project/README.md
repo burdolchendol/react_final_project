@@ -61,8 +61,8 @@ npm run dev                 # open the Screener
 `fetch:us` downloads SEC's two nightly bulk files (`companyfacts.zip` and `submissions.zip`, about 2.5 GB together),
 reads each company's JSON straight out of the zips one at a time (nothing is extracted, memory stays low), writes a
 compact `index.json` for the screener plus one small file per company that loads only when you open it, then deletes the
-zips. Prices then come from Yahoo at about 2 requests a second, so a full run takes 1 to 2 hours. A failed run leaves
-the previous snapshot in place.
+zips. Prices come from Yahoo 20 companies per request (about 300 requests, paced at 2 a second), so they take around
+5 minutes; anything a batch misses is retried one by one. A failed run leaves the previous snapshot in place.
 
 | Command | What it does |
 | --- | --- |

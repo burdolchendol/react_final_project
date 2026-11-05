@@ -32,3 +32,32 @@ test("parseStooqCsv filters by date", () => {
   assert.deepEqual(p.history, [["2024-01-02", 20]]);
   assert.equal(p.last, 20);
 });
+
+import { normalizeYahooSpark } from "../scripts/providers/yahooPrices.mjs";
+
+test("normalizeYahooSpark reads the v8 multi-symbol shape and skips empty symbols", () => {
+  const json = {
+    AAPL: { symbol: "AAPL", timestamp: [1704205800, 1704810600], close: [185.64, 186.5] },
+    MSFT: { symbol: "MSFT", timestamp: [1704205800], close: [null] },
+  };
+  const out = normalizeYahooSpark(json);
+  assert.deepEqual([...out.keys()], ["AAPL"]);
+  assert.equal(out.get("AAPL").last, 186.5);
+  assert.equal(out.get("AAPL").history.length, 2);
+});
+
+test("normalizeYahooSpark reads the v7 shape", () => {
+  const json = {
+    spark: {
+      result: [
+        {
+          symbol: "KO",
+          response: [{ meta: { currency: "USD" }, timestamp: [1704205800], indicators: { quote: [{ close: [60.1] }] } }],
+        },
+      ],
+    },
+  };
+  const out = normalizeYahooSpark(json);
+  assert.equal(out.get("KO").last, 60.1);
+  assert.equal(out.get("KO").currency, "USD");
+});

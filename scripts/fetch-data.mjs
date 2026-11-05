@@ -1,5 +1,5 @@
 // Builds the static data snapshot the app reads (public/data/<market>/).
-//   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips, ~1-2 hours)
+//   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips + batched prices, ~15 min)
 //   node scripts/fetch-data.mjs --market us --no-prices          same, financials only (minutes once zips are cached)
 //   node scripts/fetch-data.mjs --market us --universe list      the watchlist in scripts/markets/us.tickers.json
 //   node scripts/fetch-data.mjs --market us --tickers AAPL,KO    just these
@@ -129,20 +129,49 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
   console.log(`Fundamentals: ${companies.length} companies (${skipped} without annual reports skipped)`);
   if (!companies.length) throw new Error("No company data fetched; keeping the previous snapshot.");
 
-  // 2. Prices, a few at a time (each source paces itself), written as they arrive.
+  // 2. Prices: batched requests first (fast), then one-by-one for whatever they missed.
   let priced = 0;
   if (args.prices) {
-    await mapPool(companies, 3, async (c, i) => {
+    const save = (c, prices) => {
+      const { history, source, ...summary } = prices;
+      c.price = { last: summary.last, asOf: summary.asOf };
+      if (summary.currency) c.currency = summary.currency;
+      writeFileSync(new URL(companyFile(c.ticker), pricesDir), JSON.stringify({ history, source }));
+      priced++;
+    };
+
+    let missing = companies;
+    if (market.priceBatch) {
+      const { fetch, size, symbol } = market.priceBatch;
+      const batches = [];
+      for (let i = 0; i < companies.length; i += size) batches.push(companies.slice(i, i + size));
+      let done = 0;
+      await mapPool(batches, 2, async (batch) => {
+        try {
+          const found = await fetch(batch.map((c) => symbol(c.ticker)));
+          for (const c of batch) {
+            const p = found.get(symbol(c.ticker));
+            if (p) save(c, p);
+          }
+        } catch (err) {
+          console.error(`Price batch failed (${batch[0].ticker}…): ${err.message}`);
+        }
+        if (++done % 50 === 0) console.log(`Prices: ${done}/${batches.length} batches`);
+      });
+      missing = companies.filter((c) => !c.price);
+      console.log(`Batched prices: ${priced}/${companies.length}; ${missing.length} left to try one by one`);
+      if (missing.length > 500) {
+        console.warn("Many prices are missing from the batch results; the one-by-one fallback will be slow.");
+      }
+    }
+
+    await mapPool(missing, 3, async (c, i) => {
       try {
-        const { history, source, ...summary } = await fetchPrices(market, c.ticker);
-        c.price = { last: summary.last, asOf: summary.asOf };
-        if (summary.currency) c.currency = summary.currency;
-        writeFileSync(new URL(companyFile(c.ticker), pricesDir), JSON.stringify({ history, source }));
-        priced++;
+        save(c, await fetchPrices(market, c.ticker));
       } catch (err) {
         if (args.universe === "list") console.error(`✗ ${c.ticker} price: ${err.message}`);
       }
-      if ((i + 1) % 250 === 0) console.log(`Prices: ${i + 1}/${companies.length}`);
+      if ((i + 1) % 250 === 0) console.log(`Prices (one by one): ${i + 1}/${missing.length}`);
     });
   }
 
