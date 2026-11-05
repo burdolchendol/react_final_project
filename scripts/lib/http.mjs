@@ -14,12 +14,12 @@ export async function fetchWithRetry(url, { headers = {}, minIntervalMs = 150, r
     try {
       const res = await fetch(url, { headers });
       if (res.ok) return res;
-      // 404 will not fix itself, so fail fast.
-      if (res.status === 404 || attempt >= retries) {
+      // Not found / forbidden will not fix themselves, so fail fast.
+      if (res.status === 403 || res.status === 404 || attempt >= retries) {
         throw new Error(`HTTP ${res.status} for ${url}`);
       }
     } catch (err) {
-      if (attempt >= retries || String(err.message).startsWith("HTTP 404")) throw err;
+      if (attempt >= retries || /^HTTP 40[34]/.test(err.message)) throw err;
     }
     await sleep(1000 * 2 ** attempt);
   }

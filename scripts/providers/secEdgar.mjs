@@ -4,10 +4,20 @@
 
 import { fetchJson } from "../lib/http.mjs";
 
-const USER_AGENT =
-  process.env.SEC_USER_AGENT ||
-  "react_final_project stock analyzer 321728857+burdolchendol@users.noreply.github.com";
-const HEADERS = { "User-Agent": USER_AGENT, Accept: "application/json" };
+// SEC blocks requests whose User-Agent doesn't name a person/company and a contact
+// email (HTTP 403), so this must be set by whoever runs the fetch. See README.
+export function secUserAgent() {
+  const ua = process.env.SEC_USER_AGENT?.trim();
+  if (!ua || !/\S+@\S+\.\S+/.test(ua)) {
+    throw new Error(
+      'SEC_USER_AGENT is not set. SEC requires a name and contact email, e.g. SEC_USER_AGENT="Jane Doe jane@example.com". ' +
+        "Put it in a .env file (see .env.example) or set it as a GitHub repository variable."
+    );
+  }
+  return ua;
+}
+
+const headers = () => ({ "User-Agent": secUserAgent(), Accept: "application/json", "Accept-Encoding": "gzip, deflate" });
 
 // Each normalized field lists XBRL concepts in priority order. Companies switch
 // tags over the years (e.g. Revenues -> RevenueFromContractWithCustomer...), so
@@ -137,7 +147,7 @@ export function normalizeCompanyFacts(companyFacts) {
 
 let tickerMapPromise;
 async function tickerToCik(ticker) {
-  tickerMapPromise ??= fetchJson("https://www.sec.gov/files/company_tickers.json", { headers: HEADERS }).then(
+  tickerMapPromise ??= fetchJson("https://www.sec.gov/files/company_tickers.json", { headers: headers() }).then(
     (data) => new Map(Object.values(data).map((c) => [c.ticker.toUpperCase(), c]))
   );
   const entry = (await tickerMapPromise).get(ticker.toUpperCase());
@@ -148,8 +158,8 @@ async function tickerToCik(ticker) {
 export async function fetchFundamentals(ticker) {
   const { cik, name } = await tickerToCik(ticker);
   const [facts, submissions] = await Promise.all([
-    fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, { headers: HEADERS }),
-    fetchJson(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: HEADERS }).catch(() => null),
+    fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, { headers: headers() }),
+    fetchJson(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: headers() }).catch(() => null),
   ]);
 
   return {

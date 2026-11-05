@@ -1,6 +1,7 @@
 // Builds the static data snapshot the app reads (public/data/<market>/).
 //   node scripts/fetch-data.mjs --market us [--tickers AAPL,MSFT]
 // Run by .github/workflows/refresh-data.yml on a schedule, or locally.
+// Needs SEC_USER_AGENT (see .env.example).
 
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { MARKETS } from "./markets/index.mjs";
@@ -60,6 +61,7 @@ async function main() {
   const market = MARKETS[marketId];
   if (!market) throw new Error(`Unknown market "${marketId}". Known: ${Object.keys(MARKETS).join(", ")}`);
 
+  market.checkConfig?.();
   const tickers = onlyTickers ?? market.tickers();
   const outDir = new URL(`../public/data/${marketId}/`, import.meta.url);
   const pricesDir = new URL("prices/", outDir);
@@ -76,6 +78,13 @@ async function main() {
     } catch (err) {
       failures.push({ ticker, error: err.message });
       console.error(`✗ ${ticker}: ${err.message}`);
+      // A 403 from SEC means every request will be refused; stop instead of repeating it per ticker.
+      if (/^HTTP 403 .*sec\.gov/.test(err.message)) {
+        throw new Error(
+          `SEC refused the request (HTTP 403). Check SEC_USER_AGENT is "Your Name your@email.com" ` +
+            `(currently "${process.env.SEC_USER_AGENT}"), and that you are not on a VPN or blocked network.`
+        );
+      }
     }
   }
 

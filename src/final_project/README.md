@@ -51,6 +51,7 @@ GitHub Pages can't call these APIs from the browser (no CORS, and SEC needs a Us
 (or on demand from the Actions tab), commits it, and redeploys the site.
 
 ```bash
+cp .env.example .env                                        # then put your name and email in it (SEC requires this)
 npm run fetch:us                                            # refresh every ticker in scripts/markets/us.tickers.json
 node scripts/fetch-data.mjs --market us --tickers AAPL,KO   # quick test with a few tickers (overwrites the index)
 npm test                                                    # unit tests for parsers, metrics and rules
@@ -58,7 +59,9 @@ npm test                                                    # unit tests for par
 
 - **Pick tickers:** edit `scripts/markets/us.tickers.json`. US filers of 10-K reports only (no ADRs, and dual-class
   quirks like BRK-B make per-share ratios misleading).
-- **SEC contact:** set a repository variable `SEC_USER_AGENT` such as `Your Name you@example.com`; SEC asks every client to identify itself.
+- **SEC contact (required):** SEC refuses requests (HTTP 403) that don't name who is asking. Locally, set
+  `SEC_USER_AGENT="Your Name you@example.com"` in `.env` (git-ignored). For the GitHub Action, add the same value as a
+  repository variable: Settings → Secrets and variables → Actions → Variables → `SEC_USER_AGENT`.
 - **Your rules:** the *My Rules* page starts with Graham's seven defensive-investor tests. Change thresholds, switch rules on or
   off, or add rules on any metric. They are saved in your browser.
 

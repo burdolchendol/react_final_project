@@ -28,7 +28,7 @@ jobs:
 
       - name: Fetch US market snapshot
         env:
-          # Optional repo variable: SEC asks for "Name contact@email" here.
+          # Required repo variable (Settings > Secrets and variables > Actions > Variables), e.g. "Jane Doe jane@example.com".
           SEC_USER_AGENT: ${{ vars.SEC_USER_AGENT }}
         run: npm run fetch:us
 

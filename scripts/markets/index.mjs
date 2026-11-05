@@ -16,6 +16,8 @@ export const MARKETS = {
     currency: "USD",
     tickers: () => readTickers("./us.tickers.json"),
     fundamentals: secEdgar.fetchFundamentals,
+    // Fails before any download if required settings are missing.
+    checkConfig: secEdgar.secUserAgent,
     // Tried in order until one succeeds.
     priceSources: [
       { fetch: yahoo.fetchPrices, symbol: (t) => t.replace(".", "-") },

@@ -11,7 +11,7 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "test": "node --test tests/*.test.mjs",
-    "fetch:us": "node scripts/fetch-data.mjs --market us"
+    "fetch:us": "node --env-file-if-exists=.env scripts/fetch-data.mjs --market us"
   },
   "dependencies": {
     "react": "^19.2.8",
