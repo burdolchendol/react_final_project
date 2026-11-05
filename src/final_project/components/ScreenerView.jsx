@@ -32,6 +32,7 @@ export default function ScreenerView({
   const [query, setQuery] = useState("");
   const [minPassed, setMinPassed] = useState(0);
   const [hideNoPrice, setHideNoPrice] = useState(true);
+  const [origin, setOrigin] = useState("all"); // "all" | "us" | "foreign"
   const [shown, setShown] = useState(PAGE_SIZE);
 
   const rows = useMemo(() => {
@@ -50,10 +51,11 @@ export default function ScreenerView({
     return rows.filter(
       ({ company, metrics, verdict }) =>
         verdict.passed >= minPassed &&
+        (origin === "all" || (origin === "foreign") === Boolean(company.foreign)) &&
         (!hideNoPrice || !anyPriced || metrics.price != null) &&
         (!q || company.ticker.toLowerCase().startsWith(q) || company.name.toLowerCase().includes(q))
     );
-  }, [rows, query, minPassed, hideNoPrice, anyPriced]);
+  }, [rows, query, minPassed, hideNoPrice, anyPriced, origin]);
 
   const sorted = useMemo(() => {
     const value = (r) => {
@@ -130,6 +132,20 @@ export default function ScreenerView({
             {Array.from({ length: enabledRules + 1 }, (_, n) => (
               <option key={n} value={n}>{n} of {enabledRules} rules</option>
             ))}
+          </select>
+          <label className="control-label" htmlFor="origin">Companies</label>
+          <select
+            id="origin"
+            className="form-input"
+            value={origin}
+            onChange={(e) => {
+              setOrigin(e.target.value);
+              setShown(PAGE_SIZE);
+            }}
+          >
+            <option value="all">All</option>
+            <option value="us">US (10-K filers)</option>
+            <option value="foreign">Foreign (20-F / 40-F filers)</option>
           </select>
           <label className="control-label checkbox-label">
             <input type="checkbox" checked={hideNoPrice} onChange={(e) => setHideNoPrice(e.target.checked)} /> Hide
