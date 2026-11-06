@@ -1,0 +1,279 @@
+// Builds the static data snapshot the app reads (public/data/<market>/).
+//   node scripts/fetch-data.mjs --market us                      every listed company (SEC bulk zips + Defeat Beta price file)
+//   node scripts/fetch-data.mjs --market us --no-prices          same, financials only (minutes once zips are cached)
+//   node scripts/fetch-data.mjs --market us --zip-dir ~/Downloads use companyfacts.zip / submissions.zip you downloaded
+//   node scripts/fetch-data.mjs --market us --universe list      the watchlist in scripts/markets/us.tickers.json
+//   node scripts/fetch-data.mjs --market us --tickers AAPL,KO    just these
+// Run by .github/workflows/refresh-data.yml on a schedule, or locally.
+// Needs SEC_USER_AGENT (see .env.example).
+
+import { mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { MARKETS } from "./markets/index.mjs";
+import { mapPool } from "./lib/http.mjs";
+import { convertYearsToUsd } from "./lib/fx.mjs";
+import { DISPLAY_CURRENCIES } from "../src/final_project/data/currencies.js";
+import { INDEX_FIELDS, INDEX_YEARS, toRow, companyFile } from "../src/final_project/data/snapshotFormat.js";
+
+// Bulk downloads go here (git-ignored). Deleted after the run unless --keep-zips.
+const CACHE_DIR = fileURLToPath(new URL("../.cache/sec/", import.meta.url));
+
+function parseArgs(argv) {
+  const args = { market: "us", universe: "all", tickers: null, zipDir: process.env.SEC_ZIP_DIR || null, prices: true, yahoo: true, sectors: true, keepZips: false };
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--market") args.market = argv[++i];
+    else if (argv[i] === "--universe") args.universe = argv[++i];
+    // Folder with files you downloaded yourself: companyfacts.zip, submissions.zip, stock_prices.parquet.
+    else if (argv[i] === "--zip-dir") args.zipDir = argv[++i];
+    else if (argv[i] === "--no-prices") args.prices = false;
+    else if (argv[i] === "--no-yahoo") args.yahoo = false; // only use the bulk price file
+    else if (argv[i] === "--no-sectors") args.sectors = false; // skip submissions.zip (industry names)
+    else if (argv[i] === "--keep-zips") args.keepZips = true; // keep the ~2.5 GB of SEC zips for a rerun today
+    else if (argv[i] === "--tickers") {
+      args.tickers = argv[++i].split(",").map((t) => t.trim().toUpperCase());
+      args.universe = "list";
+    }
+  }
+  return args;
+}
+
+async function fetchPrices(market, ticker) {
+  const errors = [];
+  for (const source of market.priceSources) {
+    try {
+      return await source.fetch(source.symbol(ticker));
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  throw new Error(`All price sources failed: ${errors.join(" | ")}`);
+}
+
+const isSec403 = (err) => /^HTTP 403 .*sec\.gov/.test(err.message);
+const sec403Help = () =>
+  new Error(
+    `SEC refused the request (HTTP 403). Check SEC_USER_AGENT is "Your Name your@email.com" ` +
+      `(currently "${process.env.SEC_USER_AGENT}"), and that you are not on a VPN or blocked network.`
+  );
+
+// Yields { company, fundamentals } for every company in the chosen universe.
+async function* fundamentalsFor(market, args, failures) {
+  if (args.universe === "all") {
+    const companies = await market.listAll();
+    console.log(`${companies.length} listed companies`);
+    yield* market.bulkFundamentals(companies, { cacheDir: CACHE_DIR, zipDir: args.zipDir, withSectors: args.sectors, keepZips: args.keepZips });
+    return;
+  }
+  const companies = await market.resolveTickers(args.tickers ?? market.watchlist());
+  for (const company of companies) {
+    try {
+      yield { company, fundamentals: await market.fundamentals(company) };
+    } catch (err) {
+      if (isSec403(err)) throw sec403Help();
+      failures.push({ ticker: company.ticker, error: err.message });
+      console.error(`✗ ${company.ticker}: ${err.message}`);
+    }
+  }
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const market = MARKETS[args.market];
+  if (!market) throw new Error(`Unknown market "${args.market}". Known: ${Object.keys(MARKETS).join(", ")}`);
+  market.checkConfig?.();
+
+  // Build into a staging folder and swap it in at the end, so a failed run
+  // leaves the previous snapshot untouched.
+  const finalDir = new URL(`../public/data/${args.market}/`, import.meta.url);
+  const outDir = new URL(`../public/data/${args.market}.partial/`, import.meta.url);
+  const detailDir = new URL("companies/", outDir);
+  const pricesDir = new URL("prices/", outDir);
+  rmSync(outDir, { recursive: true, force: true });
+  for (const dir of [detailDir, pricesDir]) mkdirSync(dir, { recursive: true });
+  try {
+    await buildSnapshot(args, market, outDir, detailDir, pricesDir);
+  } catch (err) {
+    rmSync(outDir, { recursive: true, force: true });
+    throw err;
+  }
+  rmSync(finalDir, { recursive: true, force: true });
+  renameSync(outDir, finalDir);
+  console.log(`Snapshot ready in public/data/${args.market}/`);
+}
+
+async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
+
+  // 1. Fundamentals, one company at a time. Each company's full history goes
+  //    straight to its own file; only the compact index row stays in memory.
+  //    Companies with no annual report data (funds, SPACs, new listings) are skipped.
+  //    Companies reporting in another currency wait until exchange rates are loaded.
+  const failures = [];
+  const companies = [];
+  const nonUsd = [];
+  let skipped = 0;
+
+  const add = (company, fundamentals, years, financialCurrency) => {
+    writeFileSync(new URL(companyFile(company.ticker), detailDir), JSON.stringify({ fiscalYears: years }));
+    companies.push({
+      ticker: company.ticker,
+      cik: fundamentals.cik,
+      name: fundamentals.name,
+      sector: fundamentals.sector,
+      exchange: fundamentals.exchange,
+      currency: market.currency,
+      // Foreign filers (20-F / 40-F): financials may be converted, and price ratios are not shown.
+      foreign: fundamentals.foreign || undefined,
+      reportingCurrency: fundamentals.currency !== "USD" ? fundamentals.currency : undefined,
+      financialCurrency: financialCurrency !== "USD" ? financialCurrency : undefined,
+      // Rate used for the latest year (reporting currency per USD), to show the reported figure.
+      reportingRate: years.at(-1)?.fxRate,
+      price: null,
+      years: years.slice(-INDEX_YEARS).map(toRow),
+    });
+  };
+
+  try {
+    for await (const { company, fundamentals } of fundamentalsFor(market, args, failures)) {
+      if (!fundamentals.fiscalYears.length) skipped++;
+      else if (fundamentals.currency && fundamentals.currency !== "USD") nonUsd.push({ company, fundamentals });
+      else add(company, fundamentals, fundamentals.fiscalYears, "USD");
+    }
+  } catch (err) {
+    throw isSec403(err) ? sec403Help() : err;
+  }
+
+  // Exchange rates: for converting foreign filers, and the latest market rate of
+  // each display currency for the Screener's currency switcher.
+  let rates = new Map();
+  if (market.fxRates) {
+    try {
+      rates = await market.fxRates(
+        [...nonUsd.map((x) => x.fundamentals.currency), ...DISPLAY_CURRENCIES.map((c) => c.code)],
+        { fileDir: args.zipDir, cacheDir: CACHE_DIR }
+      );
+    } catch (err) {
+      console.error(`Exchange rates unavailable: ${err.message}`);
+    }
+  }
+  const fx = { asOf: null, rates: {} };
+  for (const { code } of DISPLAY_CURRENCIES) {
+    const last = rates.get(code)?.at(-1);
+    if (!last) continue;
+    fx.rates[code] = last[1];
+    if (!fx.asOf || last[0] > fx.asOf) fx.asOf = last[0];
+  }
+  if (Object.keys(fx.rates).length) {
+    console.log(`Display currencies: ${Object.keys(fx.rates).length}/${DISPLAY_CURRENCIES.length - 1} market rates`);
+  }
+
+  if (nonUsd.length) {
+    let converted = 0;
+    for (const { company, fundamentals } of nonUsd) {
+      const usd = convertYearsToUsd(fundamentals.fiscalYears, fundamentals.currency, rates.get(fundamentals.currency));
+      if (usd) converted++;
+      // Without a rate, keep the reported currency; the app then hides money columns for it.
+      add(company, fundamentals, usd ?? fundamentals.fiscalYears, usd ? "USD" : fundamentals.currency);
+    }
+    console.log(`Foreign currencies: ${converted}/${nonUsd.length} companies converted to USD`);
+  }
+  const foreignCount = companies.filter((c) => c.foreign).length;
+  if (foreignCount) console.log(`Foreign filers (20-F / 40-F): ${foreignCount}`);
+
+  console.log(`Fundamentals: ${companies.length} companies (${skipped} without annual reports skipped)`);
+  if (!companies.length) throw new Error("No company data fetched; keeping the previous snapshot.");
+
+  // 2. Prices: one bulk file first, then batched requests, then one by one, each
+  //    only for whatever the previous step missed.
+  let priced = 0;
+  if (args.prices) {
+    const save = (c, prices) => {
+      const { history, source, ...summary } = prices;
+      // Prices are weekly closes. prev: the week before, for the ticker tape's change.
+      // avg10w: the 10-week average, about the same as a 50-trading-day average.
+      const recent = history.slice(-10).map(([, close]) => close);
+      c.price = {
+        last: summary.last,
+        asOf: summary.asOf,
+        prev: history.at(-2)?.[1],
+        avg10w: recent.length === 10 ? Number((recent.reduce((a, b) => a + b, 0) / 10).toFixed(4)) : undefined,
+      };
+      if (summary.currency) c.currency = summary.currency;
+      writeFileSync(new URL(companyFile(c.ticker), pricesDir), JSON.stringify({ history, source }));
+      priced++;
+    };
+
+    let missing = companies;
+    // The bulk file is ~470 MB, worth it only for the full universe.
+    if (market.priceBulk && args.universe === "all") {
+      const { fetch, symbol } = market.priceBulk;
+      try {
+        const found = await fetch(companies.map((c) => symbol(c.ticker)), {
+          fileDir: args.zipDir,
+          cacheDir: CACHE_DIR,
+          keepFiles: args.keepZips,
+        });
+        for (const c of companies) {
+          const p = found.get(symbol(c.ticker));
+          if (p) save(c, p);
+        }
+      } catch (err) {
+        console.error(`Bulk prices failed: ${err.message}`);
+      }
+      missing = companies.filter((c) => !c.price);
+      console.log(`Bulk prices: ${priced}/${companies.length}; ${missing.length} missing`);
+    }
+    if (!args.yahoo) missing = [];
+
+    if (market.priceBatch && missing.length) {
+      const { fetch, size, symbol } = market.priceBatch;
+      const batches = [];
+      for (let i = 0; i < missing.length; i += size) batches.push(missing.slice(i, i + size));
+      let done = 0;
+      await mapPool(batches, 2, async (batch) => {
+        try {
+          const found = await fetch(batch.map((c) => symbol(c.ticker)));
+          for (const c of batch) {
+            const p = found.get(symbol(c.ticker));
+            if (p) save(c, p);
+          }
+        } catch (err) {
+          console.error(`Price batch failed (${batch[0].ticker}…): ${err.message}`);
+        }
+        if (++done % 50 === 0) console.log(`Prices: ${done}/${batches.length} batches`);
+      });
+      missing = missing.filter((c) => !c.price);
+      console.log(`Batched prices: ${priced}/${companies.length}; ${missing.length} left to try one by one`);
+      if (missing.length > 500) {
+        console.warn("Many prices are missing from the batch results; the one-by-one fallback will be slow.");
+      }
+    }
+
+    await mapPool(missing, 3, async (c, i) => {
+      try {
+        save(c, await fetchPrices(market, c.ticker));
+      } catch (err) {
+        if (args.universe === "list") console.error(`✗ ${c.ticker} price: ${err.message}`);
+      }
+      if ((i + 1) % 250 === 0) console.log(`Prices (one by one): ${i + 1}/${missing.length}`);
+    });
+  }
+
+  const index = {
+    market: args.market,
+    label: market.label,
+    currency: market.currency,
+    universe: args.universe,
+    generatedAt: new Date().toISOString(),
+    fields: INDEX_FIELDS,
+    fx,
+    companies,
+    failures,
+  };
+  writeFileSync(new URL("index.json", outDir), JSON.stringify(index));
+  console.log(`${companies.length} companies, ${priced} with prices`);
+}
+
+main().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
