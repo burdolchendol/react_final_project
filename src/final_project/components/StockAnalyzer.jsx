@@ -26,6 +26,8 @@ export default function StockAnalyzer() {
   const [hiddenColumns, setHiddenColumns] = useStoredState("analyzer.hiddenColumns.v1", []);
   const [displayCurrency, setDisplayCurrency] = useStoredState("analyzer.displayCurrency.v1", "USD");
   const [customRates, setCustomRates] = useStoredState("analyzer.customRates.v1", {});
+  const [columnOrder, setColumnOrder] = useStoredState("analyzer.columnOrder.v1", []);
+  const [columnWidths, setColumnWidths] = useStoredState("analyzer.columnWidths.v1", {});
   const toggleStar = (ticker) =>
     setStarred((prev) => (prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker]));
   const [activeNav, setActiveNav] = useState("Screener");
@@ -73,6 +75,10 @@ export default function StockAnalyzer() {
           setDisplayCurrency={setDisplayCurrency}
           customRates={customRates}
           setCustomRates={setCustomRates}
+          columnOrder={columnOrder}
+          setColumnOrder={setColumnOrder}
+          columnWidths={columnWidths}
+          setColumnWidths={setColumnWidths}
           onOpenCompany={(ticker) => {
             setOpenTicker(ticker);
             window.scrollTo(0, 0);

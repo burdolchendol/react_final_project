@@ -760,3 +760,41 @@ h1 {
 }
 .rate-pill-custom { border-color: var(--gold); color: var(--gold); }
 .cell-reported { display: block; font-size: 11px; color: var(--text-muted); }
+
+/* Screener columns: drag a heading to move it, drag its right edge to resize. */
+.column-layout { position: relative; }
+.screener-table th { position: relative; }
+.screener-table th.movable { cursor: grab; }
+.screener-table th.col-dragging { opacity: 0.35; }
+body.col-drag-active, body.col-drag-active * { cursor: grabbing !important; user-select: none; }
+.col-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.col-resizer {
+  position: absolute; top: 0; right: 0; width: 9px; height: 100%;
+  cursor: col-resize; touch-action: none; z-index: 1;
+}
+.col-resizer::after {
+  content: ""; position: absolute; right: 0; top: 25%; bottom: 25%; width: 1px; background: var(--border);
+}
+.col-resizer:hover::after, .col-resizer.active::after { background: var(--gold); width: 2px; top: 0; bottom: 0; }
+.col-drop-line {
+  position: absolute; top: 0; bottom: 0; width: 3px; border-radius: 2px;
+  background: var(--gold); pointer-events: none; display: none; z-index: 3;
+}
+.col-drag-ghost {
+  position: fixed; z-index: 50; pointer-events: none; display: none;
+  background: var(--gold); color: var(--bg); border-radius: 6px; padding: 5px 10px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+.col-width-tip {
+  position: fixed; z-index: 50; pointer-events: none; display: none;
+  background: var(--surface); border: 1px solid var(--gold); color: var(--gold);
+  font-family: var(--font-mono, monospace); font-size: 11px; padding: 2px 6px; border-radius: 4px;
+}
+/* Once widths are set, a cell clips what doesn't fit instead of stretching the column. */
+.screener-table.fixed-widths { table-layout: fixed; }
+.screener-table.fixed-widths th,
+.screener-table.fixed-widths td { overflow: hidden; text-overflow: ellipsis; }
+.screener-table.fixed-widths td > div,
+.screener-table.fixed-widths .cell-reported { overflow: hidden; text-overflow: ellipsis; }
+.screener-table.fixed-widths .star-cell { overflow: visible; text-overflow: clip; padding-left: 8px; padding-right: 8px; }

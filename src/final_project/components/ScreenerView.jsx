@@ -7,6 +7,8 @@ import { formatMetric } from "../utils/format";
 import MarketPicker from "./MarketPicker";
 import CurrencyBar from "./CurrencyBar";
 import DataStatus from "./DataStatus";
+import useColumnLayout from "../hooks/useColumnLayout";
+import { orderColumns, STAR_WIDTH, FALLBACK_WIDTH } from "../utils/columnLayout";
 
 const PAGE_SIZE = 50;
 // Shown after the columns for your rules, unless a rule already shows them.
@@ -32,7 +34,8 @@ function statusByMetric(verdict) {
 
 export default function ScreenerView({
   market, setMarket, rules, settings, watchlist, toggleStar, hiddenColumns, setHiddenColumns,
-  displayCurrency, setDisplayCurrency, customRates, setCustomRates, onOpenCompany,
+  displayCurrency, setDisplayCurrency, customRates, setCustomRates,
+  columnOrder, setColumnOrder, columnWidths, setColumnWidths, onOpenCompany,
 }) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
   const [sort, setSort] = useState({ key: "score", dir: -1 });
@@ -91,7 +94,16 @@ export default function ScreenerView({
     () => ["price", ...ruleColumns.filter((k) => k !== "price"), ...EXTRA_COLUMNS.filter((k) => !ruleColumns.includes(k))],
     [ruleColumns]
   );
-  const columns = allColumns.filter((k) => !hiddenColumns.includes(k));
+  // "Rules passed" (score) moves like any other column; star and Company stay first.
+  const movable = useMemo(() => orderColumns(["score", ...allColumns], columnOrder), [allColumns, columnOrder]);
+  const columns = movable.filter((k) => !hiddenColumns.includes(k));
+  const { tableRef, wrapRef, lineRef, ghostRef, tipRef, onHeaderPointerDown, onResizeStart, onResizeFit, wasDrag } =
+    useColumnLayout({ order: movable, setOrder: setColumnOrder, setWidths: setColumnWidths });
+  // Until a column is resized the table sizes itself; after that, every column has a set width.
+  const fixedWidths = Object.keys(columnWidths).length > 0;
+  const widthOf = (key) => columnWidths[key] ?? FALLBACK_WIDTH;
+  const tableWidth = STAR_WIDTH + widthOf("company") + columns.reduce((sum, k) => sum + widthOf(k), 0);
+  const customLayout = fixedWidths || (columnOrder?.length ?? 0) > 0;
 
   // Money is stored in USD; show it in the chosen currency (your rate wins over the market rate).
   // Without any rate for it, fall back to USD.
@@ -210,8 +222,20 @@ export default function ScreenerView({
             setCustomRates={setCustomRates}
             asOf={data?.fx?.asOf}
           />
+          {customLayout && (
+            <button
+              className="sort-btn"
+              onClick={() => {
+                setColumnOrder([]);
+                setColumnWidths({});
+              }}
+              title="Put columns back in their usual order and size"
+            >
+              Reset layout
+            </button>
+          )}
           <ColumnPicker
-            columns={allColumns}
+            columns={movable.filter((k) => k !== "score")}
             ruleColumns={ruleColumns}
             hidden={hiddenColumns}
             setHidden={setHiddenColumns}
@@ -220,24 +244,45 @@ export default function ScreenerView({
       )}
 
       {sorted.length > 0 && (
-        <div className="table-wrap">
-          <table className="table screener-table">
+        <div className="table-wrap column-layout" ref={wrapRef}>
+          <div className="col-drop-line" ref={lineRef} aria-hidden="true" />
+          <table
+            className={`table screener-table ${fixedWidths ? "fixed-widths" : ""}`}
+            ref={tableRef}
+            style={fixedWidths ? { width: tableWidth } : undefined}
+          >
+            {fixedWidths && (
+              <colgroup>
+                <col style={{ width: STAR_WIDTH }} />
+                <col style={{ width: widthOf("company") }} />
+                {columns.map((key) => <col key={key} style={{ width: widthOf(key) }} />)}
+              </colgroup>
+            )}
             <thead>
               <tr>
                 <th className="star-cell" aria-label="Starred"></th>
-                <th className="sortable" onClick={() => toggleSort("ticker")}>Company{arrow("ticker")}</th>
-                <th className="sortable" onClick={() => toggleSort("score")}>Rules passed{arrow("score")}</th>
+                <th className="sortable" data-col="company" onClick={() => toggleSort("ticker")}>
+                  <span className="col-label">Company{arrow("ticker")}</span>
+                  <Resizer onStart={onResizeStart} onFit={onResizeFit} col="company" />
+                </th>
                 {columns.map((key) => {
                   const isRule = ruleColumns.includes(key);
+                  const label = key === "score" ? "Rules passed" : METRICS[key].label;
                   return (
                     <th
                       key={key}
-                      className={`sortable ${isRule ? "rule-col" : ""}`}
-                      onClick={() => toggleSort(key)}
-                      title={isRule ? ruleTitle(key) : undefined}
+                      data-col={key}
+                      data-label={label}
+                      className={`sortable movable ${isRule ? "rule-col" : ""}`}
+                      onPointerDown={(e) => onHeaderPointerDown(e, key)}
+                      onClick={() => !wasDrag() && toggleSort(key)}
+                      title={isRule ? ruleTitle(key) : `${label} · drag to move`}
                     >
-                      {METRICS[key].label}
-                      {arrow(key)}
+                      <span className="col-label">
+                        {label}
+                        {arrow(key)}
+                      </span>
+                      <Resizer onStart={onResizeStart} onFit={onResizeFit} col={key} />
                     </th>
                   );
                 })}
@@ -271,14 +316,17 @@ export default function ScreenerView({
                         )}
                       </div>
                     </td>
-                    <td>
-                      <ScoreBadge verdict={verdict} />
-                    </td>
-                    {columns.map((key) => (
-                      <td key={key} className={`mono ${status[key] ? `cell-${status[key]}` : ""}`}>
-                        {cellText(company, metrics, key)}
-                      </td>
-                    ))}
+                    {columns.map((key) =>
+                      key === "score" ? (
+                        <td key={key}>
+                          <ScoreBadge verdict={verdict} />
+                        </td>
+                      ) : (
+                        <td key={key} className={`mono ${status[key] ? `cell-${status[key]}` : ""}`}>
+                          {cellText(company, metrics, key)}
+                        </td>
+                      )
+                    )}
                   </tr>
                 );
               })}
@@ -286,6 +334,8 @@ export default function ScreenerView({
           </table>
         </div>
       )}
+      <div className="col-drag-ghost" ref={ghostRef} aria-hidden="true" />
+      <div className="col-width-tip" ref={tipRef} aria-hidden="true" />
       {sorted.length > shown && (
         <div className="controls show-more">
           <button className="sort-btn" onClick={() => setShown((n) => n + PAGE_SIZE)}>
@@ -294,6 +344,21 @@ export default function ScreenerView({
         </div>
       )}
     </div>
+  );
+}
+
+// The grab line on a heading's right edge: drag to resize, double-click to fit.
+function Resizer({ onStart, onFit, col }) {
+  return (
+    <span
+      className="col-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      title="Drag to resize · double-click to fit"
+      onPointerDown={(e) => onStart(e, col)}
+      onDoubleClick={(e) => onFit(e, col)}
+      onClick={(e) => e.stopPropagation()}
+    />
   );
 }
 
