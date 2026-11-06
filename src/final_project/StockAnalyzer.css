@@ -704,7 +704,7 @@ h1 {
 .cell-fail { color: var(--down); background: rgba(229, 72, 77, 0.08); }
 .rule-legend .cell-pass, .rule-legend .cell-fail { background: none; font-weight: 600; }
 .rule-legend { flex-basis: 100%; }
-.table-toolbar { display: flex; justify-content: flex-end; padding: 0 0 8px; }
+.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; padding: 0 0 8px; }
 .column-picker { position: relative; }
 .column-menu {
   position: absolute;
@@ -734,3 +734,29 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.currency-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.currency-bar .form-input { padding: 5px 8px; font-size: 13px; }
+.rate-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.rate-input { width: 100px; font-family: 'IBM Plex Mono', monospace; }
+.rate-pill {
+  padding: 0 7px;
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.rate-pill-custom { border-color: var(--gold); color: var(--gold); }
+.cell-reported { display: block; font-size: 11px; color: var(--text-muted); }

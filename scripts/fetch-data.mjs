@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { MARKETS } from "./markets/index.mjs";
 import { mapPool } from "./lib/http.mjs";
 import { convertYearsToUsd } from "./lib/fx.mjs";
+import { DISPLAY_CURRENCIES } from "../src/final_project/data/currencies.js";
 import { INDEX_FIELDS, INDEX_YEARS, toRow, companyFile } from "../src/final_project/data/snapshotFormat.js";
 
 // Bulk downloads go here (git-ignored). Deleted after the run unless --keep-zips.
@@ -124,6 +125,8 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
       foreign: fundamentals.foreign || undefined,
       reportingCurrency: fundamentals.currency !== "USD" ? fundamentals.currency : undefined,
       financialCurrency: financialCurrency !== "USD" ? financialCurrency : undefined,
+      // Rate used for the latest year (reporting currency per USD), to show the reported figure.
+      reportingRate: years.at(-1)?.fxRate,
       price: null,
       years: years.slice(-INDEX_YEARS).map(toRow),
     });
@@ -139,16 +142,31 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
     throw isSec403(err) ? sec403Help() : err;
   }
 
-  if (nonUsd.length) {
-    let rates = new Map();
+  // Exchange rates: for converting foreign filers, and the latest market rate of
+  // each display currency for the Screener's currency switcher.
+  let rates = new Map();
+  if (market.fxRates) {
     try {
       rates = await market.fxRates(
-        nonUsd.map((x) => x.fundamentals.currency),
+        [...nonUsd.map((x) => x.fundamentals.currency), ...DISPLAY_CURRENCIES.map((c) => c.code)],
         { fileDir: args.zipDir, cacheDir: CACHE_DIR }
       );
     } catch (err) {
       console.error(`Exchange rates unavailable: ${err.message}`);
     }
+  }
+  const fx = { asOf: null, rates: {} };
+  for (const { code } of DISPLAY_CURRENCIES) {
+    const last = rates.get(code)?.at(-1);
+    if (!last) continue;
+    fx.rates[code] = last[1];
+    if (!fx.asOf || last[0] > fx.asOf) fx.asOf = last[0];
+  }
+  if (Object.keys(fx.rates).length) {
+    console.log(`Display currencies: ${Object.keys(fx.rates).length}/${DISPLAY_CURRENCIES.length - 1} market rates`);
+  }
+
+  if (nonUsd.length) {
     let converted = 0;
     for (const { company, fundamentals } of nonUsd) {
       const usd = convertYearsToUsd(fundamentals.fiscalYears, fundamentals.currency, rates.get(fundamentals.currency));
@@ -239,6 +257,7 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
     universe: args.universe,
     generatedAt: new Date().toISOString(),
     fields: INDEX_FIELDS,
+    fx,
     companies,
     failures,
   };

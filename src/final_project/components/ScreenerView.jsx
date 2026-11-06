@@ -5,6 +5,7 @@ import { METRICS, computeMetrics } from "../utils/metrics";
 import { evaluateRules } from "../utils/rules";
 import { formatMetric } from "../utils/format";
 import MarketPicker from "./MarketPicker";
+import CurrencyBar from "./CurrencyBar";
 import DataStatus from "./DataStatus";
 
 const PAGE_SIZE = 50;
@@ -13,6 +14,11 @@ const EXTRA_COLUMNS = [
   "marketCap", "pe3", "pb", "currentRatio", "debtToEquity", "roe", "epsCagr", "intrinsicValue", "marginOfSafety",
   "currentAssets", "currentLiabilities", "cash", "totalDebt", "equity", "intangiblesGoodwill",
 ];
+
+// Money columns that come from the filings, so a foreign filer has a reported-currency figure.
+const REPORTED_KEYS = new Set([
+  "revenue", "currentAssets", "currentLiabilities", "cash", "totalDebt", "equity", "intangiblesGoodwill",
+]);
 
 // Per metric: "fail" if any rule on it fails, else "pass" if one passes, else "na".
 function statusByMetric(verdict) {
@@ -25,7 +31,8 @@ function statusByMetric(verdict) {
 }
 
 export default function ScreenerView({
-  market, setMarket, rules, settings, watchlist, toggleStar, hiddenColumns, setHiddenColumns, onOpenCompany,
+  market, setMarket, rules, settings, watchlist, toggleStar, hiddenColumns, setHiddenColumns,
+  displayCurrency, setDisplayCurrency, customRates, setCustomRates, onOpenCompany,
 }) {
   const { data, error, loading } = useAsync(() => loadMarketIndex(market), market);
   const [sort, setSort] = useState({ key: "score", dir: -1 });
@@ -85,6 +92,40 @@ export default function ScreenerView({
     [ruleColumns]
   );
   const columns = allColumns.filter((k) => !hiddenColumns.includes(k));
+
+  // Money is stored in USD; show it in the chosen currency (your rate wins over the market rate).
+  // Without any rate for it, fall back to USD.
+  const marketRates = data?.fx?.rates ?? {};
+  const chosenRate = displayCurrency === "USD" ? 1 : customRates[displayCurrency] ?? marketRates[displayCurrency];
+  const shownCurrency = chosenRate ? displayCurrency : "USD";
+  const fxRate = chosenRate ?? 1;
+  const cellText = (company, metrics, key) => {
+    const { format } = METRICS[key];
+    const value = metrics[key];
+    if (format !== "money") return formatMetric(value, format, company.currency);
+    const shown = formatMetric(value == null ? value : value * fxRate, "money", shownCurrency);
+    // Foreign filers: also show the figure as reported, in their own currency.
+    if (REPORTED_KEYS.has(key) && company.reportingCurrency && company.reportingRate && value != null
+        && company.reportingCurrency !== shownCurrency) {
+      return (
+        <>
+          {shown}
+          <span className="cell-reported">
+            {formatMetric(value * company.reportingRate, "money", company.reportingCurrency)} reported
+          </span>
+        </>
+      );
+    }
+    if (key === "price" && shownCurrency !== "USD" && value != null) {
+      return (
+        <>
+          {shown}
+          <span className="cell-reported">{formatMetric(value, "money", "USD")} in New York</span>
+        </>
+      );
+    }
+    return shown;
+  };
   const ruleTitle = (metric) =>
     rules
       .filter((r) => r.enabled && r.metric === metric)
@@ -161,6 +202,14 @@ export default function ScreenerView({
 
       {rows.length > 0 && (
         <div className="table-toolbar">
+          <CurrencyBar
+            currency={displayCurrency}
+            setCurrency={setDisplayCurrency}
+            marketRates={marketRates}
+            customRates={customRates}
+            setCustomRates={setCustomRates}
+            asOf={data?.fx?.asOf}
+          />
           <ColumnPicker
             columns={allColumns}
             ruleColumns={ruleColumns}
@@ -227,7 +276,7 @@ export default function ScreenerView({
                     </td>
                     {columns.map((key) => (
                       <td key={key} className={`mono ${status[key] ? `cell-${status[key]}` : ""}`}>
-                        {formatMetric(metrics[key], METRICS[key].format, company.currency)}
+                        {cellText(company, metrics, key)}
                       </td>
                     ))}
                   </tr>

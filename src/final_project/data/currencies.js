@@ -1,0 +1,28 @@
+// Currencies the Screener can display money in. Shared by the data script
+// (which saves their latest market rates) and the app.
+export const DISPLAY_CURRENCIES = [
+  { code: "USD", name: "US dollar", symbol: "$" },
+  { code: "SGD", name: "Singapore dollar", symbol: "S$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British pound", symbol: "£" },
+  { code: "JPY", name: "Japanese yen", symbol: "¥" },
+  { code: "CNY", name: "Chinese yuan", symbol: "CN¥" },
+  { code: "HKD", name: "Hong Kong dollar", symbol: "HK$" },
+  { code: "TWD", name: "Taiwan dollar", symbol: "NT$" },
+  { code: "KRW", name: "South Korean won", symbol: "₩" },
+  { code: "INR", name: "Indian rupee", symbol: "₹" },
+  { code: "AUD", name: "Australian dollar", symbol: "A$" },
+  { code: "CAD", name: "Canadian dollar", symbol: "C$" },
+  { code: "CHF", name: "Swiss franc", symbol: "CHF " },
+  { code: "SEK", name: "Swedish krona", symbol: "SEK " },
+  { code: "NOK", name: "Norwegian krone", symbol: "NOK " },
+  { code: "DKK", name: "Danish krone", symbol: "DKK " },
+  { code: "NZD", name: "New Zealand dollar", symbol: "NZ$" },
+  { code: "MXN", name: "Mexican peso", symbol: "MX$" },
+  { code: "BRL", name: "Brazilian real", symbol: "R$" },
+  { code: "ZAR", name: "South African rand", symbol: "R " },
+  { code: "MYR", name: "Malaysian ringgit", symbol: "RM " },
+];
+
+export const currencySymbol = (code) =>
+  DISPLAY_CURRENCIES.find((c) => c.code === code)?.symbol ?? `${code} `;

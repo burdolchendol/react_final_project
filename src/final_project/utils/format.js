@@ -1,3 +1,5 @@
+import { currencySymbol } from "../data/currencies.js";
+
 // Formatting helpers for real financial data (values may be null).
 
 const DASH = "—";
@@ -16,9 +18,6 @@ export function formatMoney(n, currency = "USD") {
   return `${currencySymbol(currency)}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function currencySymbol(currency) {
-  return { USD: "$", SGD: "S$" }[currency] ?? `${currency} `;
-}
 
 export function formatMetric(value, format, currency) {
   if (value === Infinity) return "∞";

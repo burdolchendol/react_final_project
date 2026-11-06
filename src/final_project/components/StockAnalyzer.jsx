@@ -24,6 +24,8 @@ export default function StockAnalyzer() {
   const [starred, setStarred] = useStoredState("analyzer.starred.v1", []);
   const watchlist = useMemo(() => new Set(starred), [starred]);
   const [hiddenColumns, setHiddenColumns] = useStoredState("analyzer.hiddenColumns.v1", []);
+  const [displayCurrency, setDisplayCurrency] = useStoredState("analyzer.displayCurrency.v1", "USD");
+  const [customRates, setCustomRates] = useStoredState("analyzer.customRates.v1", {});
   const toggleStar = (ticker) =>
     setStarred((prev) => (prev.includes(ticker) ? prev.filter((t) => t !== ticker) : [...prev, ticker]));
   const [activeNav, setActiveNav] = useState("Screener");
@@ -67,6 +69,10 @@ export default function StockAnalyzer() {
           toggleStar={toggleStar}
           hiddenColumns={hiddenColumns}
           setHiddenColumns={setHiddenColumns}
+          displayCurrency={displayCurrency}
+          setDisplayCurrency={setDisplayCurrency}
+          customRates={customRates}
+          setCustomRates={setCustomRates}
           onOpenCompany={(ticker) => {
             setOpenTicker(ticker);
             window.scrollTo(0, 0);
