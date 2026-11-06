@@ -15,7 +15,10 @@ import useStoredState from "../hooks/useStoredState";
 import useAsync from "../hooks/useAsync";
 import { loadMarketIndex } from "../data/markets";
 import { DEFAULT_RULES } from "../utils/rules";
-import { DEFAULT_SETTINGS } from "../utils/metrics";
+import { DEFAULT_SETTINGS, computeMetrics } from "../utils/metrics";
+import { displayRate } from "../data/currencies";
+
+const TAPE_SIZE = 30;
 
 export default function StockAnalyzer() {
   const stocks = useMemo(() => STOCKS_META.map(analyzeStock), []);
@@ -35,14 +38,24 @@ export default function StockAnalyzer() {
   // Real-data screener state. Rules and settings persist across visits.
   const [market, setMarket] = useStoredState("analyzer.market", "us");
   const marketIndex = useAsync(() => loadMarketIndex(market), market);
-  // Starred companies with their real last close, for the ticker tape.
-  const favorites = useMemo(
-    () =>
-      (marketIndex.data?.companies ?? [])
-        .filter((c) => watchlist.has(c.ticker) && c.price)
-        .map((c) => ({ ticker: c.ticker, latestClose: c.price.last, changePct: null })),
-    [marketIndex.data, watchlist]
-  );
+  // Ticker tape: real closes from the snapshot. "All" is the biggest companies
+  // by market value; "Favorites" is what you starred on the Screener.
+  const tape = useMemo(() => {
+    const priced = (marketIndex.data?.companies ?? [])
+      .filter((c) => c.price?.last != null)
+      .map((c) => ({
+        ticker: c.ticker,
+        last: c.price.last,
+        asOf: c.price.asOf,
+        changePct: c.price.prev ? (c.price.last / c.price.prev - 1) * 100 : null,
+        size: computeMetrics(c, DEFAULT_SETTINGS).marketCap ?? -1,
+      }));
+    return {
+      all: [...priced].sort((a, b) => b.size - a.size).slice(0, TAPE_SIZE),
+      favorites: priced.filter((c) => watchlist.has(c.ticker)),
+    };
+  }, [marketIndex.data, watchlist]);
+  const tapeMoney = displayRate(displayCurrency, customRates, marketIndex.data?.fx?.rates);
   const [openTicker, setOpenTicker] = useState(null);
   const [rules, setRules] = useStoredState("analyzer.rules.v1", DEFAULT_RULES);
   const [settings, setSettings] = useStoredState("analyzer.settings.v1", DEFAULT_SETTINGS);
@@ -52,7 +65,7 @@ export default function StockAnalyzer() {
 
   return (
     <div className="page">
-      <TickerTape stocks={stocks} favorites={favorites} />
+      <TickerTape all={tape.all} favorites={tape.favorites} currency={tapeMoney.currency} rate={tapeMoney.rate} />
       <NavBar
         activeNav={activeNav}
         setActiveNav={(item) => {

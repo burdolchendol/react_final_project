@@ -6,6 +6,7 @@ import { evaluateRules } from "../utils/rules";
 import { formatMetric } from "../utils/format";
 import MarketPicker from "./MarketPicker";
 import CurrencyBar from "./CurrencyBar";
+import { displayRate } from "../data/currencies";
 import DataStatus from "./DataStatus";
 import useColumnLayout from "../hooks/useColumnLayout";
 import { orderColumns, STAR_WIDTH, FALLBACK_WIDTH } from "../utils/columnLayout";
@@ -108,9 +109,7 @@ export default function ScreenerView({
   // Money is stored in USD; show it in the chosen currency (your rate wins over the market rate).
   // Without any rate for it, fall back to USD.
   const marketRates = data?.fx?.rates ?? {};
-  const chosenRate = displayCurrency === "USD" ? 1 : customRates[displayCurrency] ?? marketRates[displayCurrency];
-  const shownCurrency = chosenRate ? displayCurrency : "USD";
-  const fxRate = chosenRate ?? 1;
+  const { currency: shownCurrency, rate: fxRate } = displayRate(displayCurrency, customRates, marketRates);
   const cellText = (company, metrics, key) => {
     const { format } = METRICS[key];
     const value = metrics[key];

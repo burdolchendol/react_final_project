@@ -188,7 +188,8 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
   if (args.prices) {
     const save = (c, prices) => {
       const { history, source, ...summary } = prices;
-      c.price = { last: summary.last, asOf: summary.asOf };
+      // prev: the close before the last one (prices are weekly), for the ticker tape's change.
+      c.price = { last: summary.last, asOf: summary.asOf, prev: history.at(-2)?.[1] };
       if (summary.currency) c.currency = summary.currency;
       writeFileSync(new URL(companyFile(c.ticker), pricesDir), JSON.stringify({ history, source }));
       priced++;

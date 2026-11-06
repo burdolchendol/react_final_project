@@ -25,6 +25,13 @@ export const DISPLAY_CURRENCIES = [
   { code: "MYR", name: "Malaysian ringgit", symbol: "RM " },
 ];
 
+// The currency money is shown in and its rate per US dollar. Your own rate wins
+// over the market rate; with neither, money stays in US dollars.
+export function displayRate(code, customRates = {}, marketRates = {}) {
+  const rate = code === "USD" ? 1 : customRates[code] ?? marketRates[code];
+  return rate ? { currency: code, rate } : { currency: "USD", rate: 1 };
+}
+
 export const currencySymbol = (code) =>
   DISPLAY_CURRENCIES.find((c) => c.code === code)?.symbol ?? `${code} `;
 
