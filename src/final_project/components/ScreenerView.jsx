@@ -34,7 +34,7 @@ function statusByMetric(verdict) {
 }
 
 export default function ScreenerView({
-  market, setMarket, rules, settings, watchlist, toggleStar, hiddenColumns, setHiddenColumns,
+  market, setMarket, rules, settings, watchlist, toggleStar, clearStars, hiddenColumns, setHiddenColumns,
   displayCurrency, setDisplayCurrency, customRates, setCustomRates,
   columnOrder, setColumnOrder, columnWidths, setColumnWidths, onOpenCompany,
 }) {
@@ -43,6 +43,7 @@ export default function ScreenerView({
   const [query, setQuery] = useState("");
   const [minPassed, setMinPassed] = useState(0);
   const [hideNoPrice, setHideNoPrice] = useState(true);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [origin, setOrigin] = useState("all"); // "all" | "us" | "foreign"
   const [shown, setShown] = useState(PAGE_SIZE);
 
@@ -64,9 +65,10 @@ export default function ScreenerView({
         verdict.passed >= minPassed &&
         (origin === "all" || (origin === "foreign") === Boolean(company.foreign)) &&
         (!hideNoPrice || !anyPriced || metrics.price != null) &&
+        (!favoritesOnly || watchlist.has(company.ticker)) &&
         (!q || company.ticker.toLowerCase().startsWith(q) || company.name.toLowerCase().includes(q))
     );
-  }, [rows, query, minPassed, hideNoPrice, anyPriced, origin]);
+  }, [rows, query, minPassed, hideNoPrice, anyPriced, origin, favoritesOnly, watchlist]);
 
   const sorted = useMemo(() => {
     const value = (r) => {
@@ -203,6 +205,31 @@ export default function ScreenerView({
             <input type="checkbox" checked={hideNoPrice} onChange={(e) => setHideNoPrice(e.target.checked)} /> Hide
             companies without a price
           </label>
+          <label className="control-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={favoritesOnly}
+              onChange={(e) => {
+                setFavoritesOnly(e.target.checked);
+                setShown(PAGE_SIZE);
+              }}
+            />{" "}
+            ★ Favorites only ({watchlist.size})
+          </label>
+          {watchlist.size > 0 && (
+            <button
+              className="sort-btn"
+              onClick={() => {
+                const n = watchlist.size;
+                if (window.confirm(`Remove all ${n} favorite${n === 1 ? "" : "s"}? This can't be undone.`)) {
+                  clearStars();
+                  setFavoritesOnly(false);
+                }
+              }}
+            >
+              Clear favorites
+            </button>
+          )}
           <span className="cell-sub">{sorted.length.toLocaleString()} matching</span>
           <span className="cell-sub rule-legend">
             <span className="cell-pass">Green</span> passes your rule · <span className="cell-fail">red</span> fails ·

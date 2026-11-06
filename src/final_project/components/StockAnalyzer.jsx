@@ -1,6 +1,4 @@
 import { useState, useMemo } from "react";
-import { STOCKS_META } from "../data/mockStocks";
-import { analyzeStock } from "../utils/analysis";
 import TickerTape from "./TickerTape";
 import NavBar from "./NavBar";
 import WhyInvestView from "./WhyInvestView";
@@ -21,7 +19,6 @@ import { displayRate } from "../data/currencies";
 const TAPE_SIZE = 30;
 
 export default function StockAnalyzer() {
-  const stocks = useMemo(() => STOCKS_META.map(analyzeStock), []);
 
   // Companies starred on the Screener, saved in this browser.
   const [starred, setStarred] = useStoredState("analyzer.starred.v1", []);
@@ -82,6 +79,7 @@ export default function StockAnalyzer() {
           settings={settings}
           watchlist={watchlist}
           toggleStar={toggleStar}
+          clearStars={() => setStarred([])}
           hiddenColumns={hiddenColumns}
           setHiddenColumns={setHiddenColumns}
           displayCurrency={displayCurrency}
@@ -111,7 +109,22 @@ export default function StockAnalyzer() {
         <RulesView rules={rules} setRules={setRules} settings={settings} setSettings={setSettings} />
       )}
       {activeNav === "Why Invest" && <WhyInvestView />}
-      {activeNav === "Graham's Analysis" && <GrahamAnalysisView stocks={stocks} />}
+      {activeNav === "Graham's Analysis" && (
+        <GrahamAnalysisView
+          companies={marketIndex.data?.companies ?? []}
+          loading={marketIndex.loading}
+          rules={rules}
+          settings={settings}
+          watchlist={watchlist}
+          currency={tapeMoney.currency}
+          rate={tapeMoney.rate}
+          onOpenCompany={(ticker) => {
+            setActiveNav("Screener");
+            setOpenTicker(ticker);
+            window.scrollTo(0, 0);
+          }}
+        />
+      )}
       
       {!isCurrentViewValid && <NotFoundView setActiveNav={setActiveNav} />}
 

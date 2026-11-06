@@ -133,3 +133,14 @@ export function evaluateRules(rules, metrics) {
   const applicable = results.filter((r) => r.status !== "na").length;
   return { results, passed, applicable, total: results.length };
 }
+
+// One-word summary for Graham's Analysis, from the margin of safety (a fraction,
+// e.g. 0.25 = 25%) and the share of your rules a company passes (0 to 1).
+export const VALUE_BUY_MARGIN = 0.2;
+export const VALUE_BUY_RULES = 0.75;
+export function grahamVerdict(marginOfSafety, passedShare) {
+  if (marginOfSafety == null || !Number.isFinite(marginOfSafety)) return "No estimate";
+  if (marginOfSafety < 0) return "Overpriced";
+  if (marginOfSafety >= VALUE_BUY_MARGIN && passedShare >= VALUE_BUY_RULES) return "Value buy";
+  return "Watch";
+}

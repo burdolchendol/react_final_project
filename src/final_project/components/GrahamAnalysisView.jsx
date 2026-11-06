@@ -1,70 +1,120 @@
-import { fmt } from "../utils/analysis";
+import { useMemo, useState } from "react";
+import { computeMetrics } from "../utils/metrics";
+import { evaluateRules, grahamVerdict, VALUE_BUY_MARGIN, VALUE_BUY_RULES } from "../utils/rules";
+import { formatMoney } from "../utils/format";
+import { ScoreBadge } from "./ScreenerView";
 
-// A playful, simplified nod to Benjamin Graham-style value screening —
-// calculating a mock intrinsic value and resulting margin of safety.
-function buildRows(stocks) {
-  return stocks.map((s) => {
-    const volatility = Math.abs(s.changePct);
-    const lastPoint = s.chartData[s.chartData.length - 1];
-    const aboveSMA50 = lastPoint.sma50 !== null && s.latestClose > lastPoint.sma50;
-    
-    // Mock Intrinsic Value estimation (e.g., roughly 15% to 40% higher than latest close for demo purposes)
-    const intrinsicValue = s.latestClose * (1.15 + (Math.abs(s.ticker.charCodeAt(0) % 30) / 100));
-    
-    // Margin of Safety formula: (Intrinsic Value - Price) / Intrinsic Value
-    const marginOfSafety = ((intrinsicValue - s.latestClose) / intrinsicValue) * 100;
+const LIST_SIZE = 30;
+const VERDICT_CLASS = { "Value buy": "up", Overpriced: "down", Watch: "", "No estimate": "cell-sub" };
+const pct = (n) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
 
-    const verdict =
-      volatility < 1.5 && aboveSMA50 && marginOfSafety > 20 ? "Value Buy" : 
-      volatility > 3 ? "Volatile" : "Mixed signal";
+// Graham-style check on real data: price against its recent trend, the Graham
+// formula's intrinsic value, the margin of safety, and how many of your rules pass.
+export default function GrahamAnalysisView({
+  companies, loading, rules, settings, watchlist, currency, rate, onOpenCompany,
+}) {
+  const [mode, setMode] = useState("biggest"); // "biggest" | "favorites"
 
-    return { ...s, volatility, aboveSMA50, intrinsicValue, marginOfSafety, verdict };
-  });
-}
+  const rows = useMemo(() => {
+    const all = companies
+      .filter((c) => c.price?.last != null)
+      .map((company) => {
+        const metrics = computeMetrics(company, settings);
+        const verdict = evaluateRules(rules, metrics);
+        const { last, prev, avg10w } = company.price;
+        return {
+          company,
+          metrics,
+          verdict,
+          weekMove: prev ? (last / prev - 1) * 100 : null,
+          vsAverage: avg10w ? (last / avg10w - 1) * 100 : null,
+          label: grahamVerdict(metrics.marginOfSafety, verdict.total ? verdict.passed / verdict.total : 0),
+        };
+      });
+    if (mode === "favorites") return all.filter((r) => watchlist.has(r.company.ticker));
+    return all.sort((a, b) => (b.metrics.marketCap ?? -1) - (a.metrics.marketCap ?? -1)).slice(0, LIST_SIZE);
+  }, [companies, rules, settings, watchlist, mode]);
 
-export default function GrahamAnalysisView({ stocks }) {
-  const rows = buildRows(stocks);
+  const money = (usd) => (usd == null ? "—" : formatMoney(usd * rate, currency));
 
   return (
     <div className="page2">
       <h2 className="h2">Graham's Analysis</h2>
       <p className="page-sub">
-        A simplified, mock screen inspired by value-investing principles: tracking price relative to the
-        50-day average, estimated intrinsic value, and the resulting margin of safety. Not financial advice.
+        Real prices and annual reports, checked the way Benjamin Graham would: is the price below the Graham
+        formula's intrinsic value, and does the company pass your rules? "Value buy" means a margin of safety of
+        at least {VALUE_BUY_MARGIN * 100}% and at least {VALUE_BUY_RULES * 100}% of your rules passed. Not financial
+        advice.
       </p>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Price</th>
-              <th>Today's Move</th>
-              <th>Above SMA 50</th>
-              <th>Intrinsic Value</th>
-              <th>Margin of Safety</th>
-              <th>Verdict</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.ticker}>
-                <td className="mono bold">{r.ticker}</td>
-                <td>${fmt(r.latestClose)}</td>
-                <td className={r.changePct >= 0 ? "up" : "down"}>
-                  {r.changePct >= 0 ? "+" : ""}
-                  {r.changePct.toFixed(2)}%
-                </td>
-                <td>{r.aboveSMA50 ? "Yes" : "No"}</td>
-                <td className="mono">${fmt(r.intrinsicValue)}</td>
-                <td className="mono up bold">
-                  {r.marginOfSafety.toFixed(1)}%
-                </td>
-                <td>{r.verdict}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div className="controls">
+        <div className="tape-toggle graham-toggle">
+          <button
+            className={`tape-toggle-btn ${mode === "biggest" ? "tape-toggle-btn-active" : ""}`}
+            onClick={() => setMode("biggest")}
+          >
+            Biggest {LIST_SIZE}
+          </button>
+          <button
+            className={`tape-toggle-btn ${mode === "favorites" ? "tape-toggle-btn-active" : ""}`}
+            onClick={() => setMode("favorites")}
+          >
+            ★ Favorites
+          </button>
+        </div>
       </div>
+
+      {rows.length === 0 ? (
+        <p className="cell-sub graham-empty">
+          {loading
+            ? "Loading…"
+            : mode === "favorites"
+              ? "No favorites yet — star a company on the Screener to see it here."
+              : "No prices yet — run npm run fetch:us to load the data."}
+        </p>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Price</th>
+                <th title="Change from the previous week's close">Week's move</th>
+                <th title="Price against its 10-week average (about 50 trading days)">vs 10-week avg</th>
+                <th title="Graham formula, using your AAA yield and growth cap from My Rules">Intrinsic value</th>
+                <th>Margin of safety</th>
+                <th>Rules passed</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ company, metrics, verdict, weekMove, vsAverage, label }) => (
+                <tr key={company.ticker} className="clickable-row" onClick={() => onOpenCompany(company.ticker)}>
+                  <td>
+                    <div className="mono bold">{company.ticker}</div>
+                    <div className="cell-sub">{company.name}</div>
+                  </td>
+                  <td className="mono" title={`Close ${company.price.asOf}`}>{money(metrics.price)}</td>
+                  <td className={`mono ${weekMove == null ? "" : weekMove >= 0 ? "up" : "down"}`}>
+                    {weekMove == null ? "—" : pct(weekMove)}
+                  </td>
+                  <td className={`mono ${vsAverage == null ? "" : vsAverage >= 0 ? "up" : "down"}`}>
+                    {vsAverage == null ? "—" : `${vsAverage >= 0 ? "Above" : "Below"} by ${Math.abs(vsAverage).toFixed(1)}%`}
+                  </td>
+                  <td className="mono">{money(metrics.intrinsicValue)}</td>
+                  <td className={`mono bold ${metrics.marginOfSafety == null ? "" : metrics.marginOfSafety >= 0 ? "up" : "down"}`}>
+                    {metrics.marginOfSafety == null ? "—" : `${(metrics.marginOfSafety * 100).toFixed(1)}%`}
+                  </td>
+                  <td>
+                    <ScoreBadge verdict={verdict} />
+                  </td>
+                  <td className={`bold ${VERDICT_CLASS[label]}`}>{label}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

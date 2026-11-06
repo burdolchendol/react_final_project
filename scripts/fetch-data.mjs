@@ -188,8 +188,15 @@ async function buildSnapshot(args, market, outDir, detailDir, pricesDir) {
   if (args.prices) {
     const save = (c, prices) => {
       const { history, source, ...summary } = prices;
-      // prev: the close before the last one (prices are weekly), for the ticker tape's change.
-      c.price = { last: summary.last, asOf: summary.asOf, prev: history.at(-2)?.[1] };
+      // Prices are weekly closes. prev: the week before, for the ticker tape's change.
+      // avg10w: the 10-week average, about the same as a 50-trading-day average.
+      const recent = history.slice(-10).map(([, close]) => close);
+      c.price = {
+        last: summary.last,
+        asOf: summary.asOf,
+        prev: history.at(-2)?.[1],
+        avg10w: recent.length === 10 ? Number((recent.reduce((a, b) => a + b, 0) / 10).toFixed(4)) : undefined,
+      };
       if (summary.currency) c.currency = summary.currency;
       writeFileSync(new URL(companyFile(c.ticker), pricesDir), JSON.stringify({ history, source }));
       priced++;
