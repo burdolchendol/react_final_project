@@ -23,6 +23,9 @@ const REPORTED_KEYS = new Set([
   "revenue", "currentAssets", "currentLiabilities", "cash", "totalDebt", "equity", "intangiblesGoodwill",
 ]);
 
+// The exchange as SEC lists it ("NYSE", "Nasdaq", "CBOE"), in its usual spelling.
+const exchangeName = (exchange) => (!exchange ? "US market" : exchange.toUpperCase() === "CBOE" ? "Cboe" : exchange);
+
 // Per metric: "fail" if any rule on it fails, else "pass" if one passes, else "na".
 function statusByMetric(verdict) {
   const out = {};
@@ -135,7 +138,7 @@ export default function ScreenerView({
       return (
         <>
           {shown}
-          <span className="cell-reported">{formatMetric(value, "money", "USD")} in New York</span>
+          <span className="cell-reported">{formatMetric(value, "money", "USD")} on {exchangeName(company.exchange)}</span>
         </>
       );
     }

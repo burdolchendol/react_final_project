@@ -237,7 +237,7 @@ All the other ratios (current ratio, debt ratios, ROE, margins, earnings record,
 **Recognition, tags, currency and conversion:** these all work exactly as for 20-F filers (section 6). In practice:
 - Most 40-F filers report under **IFRS**, so the `ifrs-full:` tags are used. A few report under US GAAP, so the US GAAP tags are used.
 - The currency is often **CAD**, converted with `CAD=X`. Some report in **USD** already, so nothing is converted.
-- The same price ratios are hidden. Most 40-F companies trade one-for-one in New York, but the app can't verify that per company, so it treats every foreign filer the same.
+- The same price ratios are hidden. Most 40-F companies trade one-for-one in the US, but the app can't verify that per company, so it treats every foreign filer the same.
 
 **Where to find the numbers in a 40-F:** the 40-F form itself is mostly a cover document. The financial statements are attached as **exhibits**. Look for the exhibit called "Audited Annual Consolidated Financial Statements", usually Exhibit 99.2 or 99.3, with "Management's Discussion and Analysis" (MD&A) as another exhibit. Open the filing index page the app links to and pick that exhibit.
 
@@ -253,7 +253,7 @@ The app stores every money figure in **USD**. When you pick another currency on 
 
 - **Money shown** = USD value × rate. The rate is units of the chosen currency per 1 USD.
 - **Rate used:** your own rate if you set one with Edit. Otherwise it's the market rate, which is the latest close of `<CODE>=X` in `exchange_rate.parquet`, saved when you run `npm run fetch:us`. If there's no rate, money stays in USD.
-- The price also shows the original USD figure underneath ("$190.00 in New York").
+- The price also shows the original USD figure underneath, with the exchange the company is listed on ("$190.00 on NYSE"). The exchange comes from SEC submissions, or from the SEC ticker list when that has none.
 - **Rules always use the USD figures**, so changing the currency never changes which companies pass.
 - The ticker tape and Graham's Analysis use the same currency and rate as the Screener.
 - The Chinese currency is shown as RMB. Its ISO code, CNY, is what's looked up in the rate file.
