@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DISPLAY_CURRENCIES } from "../data/currencies";
+import { DISPLAY_CURRENCIES, currencyLabel } from "../data/currencies";
 
 // "Show money in" dropdown plus the rate in use, which you can override.
 // Rates are units of the chosen currency per 1 US dollar.
@@ -41,7 +41,7 @@ export default function CurrencyBar({ currency, setCurrency, marketRates, custom
       >
         {DISPLAY_CURRENCIES.map((c) => (
           <option key={c.code} value={c.code}>
-            {c.code} · {c.name}
+            {c.label ?? c.code} · {c.name}
           </option>
         ))}
       </select>
@@ -65,14 +65,14 @@ export default function CurrencyBar({ currency, setCurrency, marketRates, custom
               if (e.key === "Escape") setEditing(false);
             }}
           />
-          {currency}
+          {currencyLabel(currency)}
           <button className="sort-btn sort-btn-active" onClick={apply}>Apply</button>
           <button className="sort-btn" onClick={() => setEditing(false)}>Cancel</button>
         </span>
       ) : rate ? (
         <span className="rate-chip">
           <span className="mono">
-            1 USD = {rate.toLocaleString("en-US", { maximumFractionDigits: 4 })} {currency}
+            1 USD = {rate.toLocaleString("en-US", { maximumFractionDigits: 4 })} {currencyLabel(currency)}
           </span>
           <span className={`rate-pill ${custom ? "rate-pill-custom" : ""}`} title={custom ? "" : asOf ? `Market close ${asOf}` : ""}>
             {custom ? "your rate" : "market"}
@@ -84,7 +84,7 @@ export default function CurrencyBar({ currency, setCurrency, marketRates, custom
         </span>
       ) : (
         <span className="rate-chip">
-          No market rate for {currency} yet.
+          No market rate for {currencyLabel(currency)} yet.
           <button className="sort-btn sort-btn-active" onClick={startEdit}>Enter a rate</button>
         </span>
       )}

@@ -6,7 +6,8 @@ export const DISPLAY_CURRENCIES = [
   { code: "EUR", name: "Euro", symbol: "€" },
   { code: "GBP", name: "British pound", symbol: "£" },
   { code: "JPY", name: "Japanese yen", symbol: "¥" },
-  { code: "CNY", name: "Chinese yuan", symbol: "CN¥" },
+  // Shown as RMB; CNY is the ISO code the exchange-rate file uses.
+  { code: "CNY", label: "RMB", name: "Chinese renminbi", symbol: "RMB " },
   { code: "HKD", name: "Hong Kong dollar", symbol: "HK$" },
   { code: "TWD", name: "Taiwan dollar", symbol: "NT$" },
   { code: "KRW", name: "South Korean won", symbol: "₩" },
@@ -26,3 +27,6 @@ export const DISPLAY_CURRENCIES = [
 
 export const currencySymbol = (code) =>
   DISPLAY_CURRENCIES.find((c) => c.code === code)?.symbol ?? `${code} `;
+
+// The name shown to users (e.g. RMB for CNY).
+export const currencyLabel = (code) => DISPLAY_CURRENCIES.find((c) => c.code === code)?.label ?? code;
