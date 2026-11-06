@@ -33,7 +33,7 @@ export default function TickerTape({ all, favorites, currency = "USD", rate = 1 
             : "No prices yet — run npm run fetch:us to load them."}
         </div>
       ) : (
-        <div className="tape">
+        <div className={`tape ${mode === "all" ? "tape-slow" : ""}`}>
           {[...visible, ...visible].map((s, i) => (
             <span
               className="tape-item"

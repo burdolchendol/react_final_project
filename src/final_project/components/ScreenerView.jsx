@@ -9,7 +9,7 @@ import CurrencyBar from "./CurrencyBar";
 import { displayRate } from "../data/currencies";
 import DataStatus from "./DataStatus";
 import useColumnLayout from "../hooks/useColumnLayout";
-import { orderColumns, STAR_WIDTH, FALLBACK_WIDTH } from "../utils/columnLayout";
+import { orderColumns, clampWidth, STAR_WIDTH, FALLBACK_WIDTH } from "../utils/columnLayout";
 
 const PAGE_SIZE = 50;
 // Shown after the columns for your rules, unless a rule already shows them.
@@ -100,7 +100,9 @@ export default function ScreenerView({
   // "Rules passed" (score) moves like any other column; star and Company stay first.
   const movable = useMemo(() => orderColumns(["score", ...allColumns], columnOrder), [allColumns, columnOrder]);
   const columns = movable.filter((k) => !hiddenColumns.includes(k));
-  const { tableRef, wrapRef, lineRef, ghostRef, tipRef, onHeaderPointerDown, onResizeStart, onResizeFit, wasDrag } =
+  const {
+    tableRef, wrapRef, lineRef, ghostRef, tipRef, onHeaderPointerDown, onResizeStart, onResizeFit, wasDrag, measureWidths,
+  } =
     useColumnLayout({ order: movable, setOrder: setColumnOrder, setWidths: setColumnWidths });
   // Until a column is resized the table sizes itself; after that, every column has a set width.
   const fixedWidths = Object.keys(columnWidths).length > 0;
@@ -265,6 +267,8 @@ export default function ScreenerView({
             ruleColumns={ruleColumns}
             hidden={hiddenColumns}
             setHidden={setHiddenColumns}
+            measureWidths={measureWidths}
+            setWidths={setColumnWidths}
           />
         </div>
       )}
@@ -400,14 +404,24 @@ export function ScoreBadge({ verdict }) {
 }
 
 // "Columns" dropdown: tick the columns to show. Your choice is saved in this browser.
-function ColumnPicker({ columns, ruleColumns, hidden, setHidden }) {
+function ColumnPicker({ columns, ruleColumns, hidden, setHidden, measureWidths, setWidths }) {
   const [open, setOpen] = useState(false);
+  // "Width" slider: scales every column from the widths they had when it opened.
+  const [scaling, setScaling] = useState(null); // null | { base, percent }
+  const scaleAll = (percent) => {
+    setScaling((s) => ({ ...s, percent }));
+    setWidths((prev) => {
+      const next = { ...prev };
+      for (const [key, w] of Object.entries(scaling.base)) next[key] = clampWidth((w * percent) / 100);
+      return next;
+    });
+  };
   const ref = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
-    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
-    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    const close = (e) => !ref.current?.contains(e.target) && (setOpen(false), setScaling(null));
+    const onKey = (e) => e.key === "Escape" && (setOpen(false), setScaling(null));
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -422,7 +436,10 @@ function ColumnPicker({ columns, ruleColumns, hidden, setHidden }) {
 
   return (
     <div className="column-picker" ref={ref}>
-      <button className="sort-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="true">
+      <button className="sort-btn" onClick={() => {
+          setOpen((o) => !o);
+          setScaling(null);
+        }} aria-expanded={open} aria-haspopup="true">
         Columns ({shownCount}/{columns.length}) ▾
       </button>
       {open && (
@@ -432,7 +449,29 @@ function ColumnPicker({ columns, ruleColumns, hidden, setHidden }) {
             <button className="sort-btn" onClick={() => setHidden(columns.filter((k) => k !== "price"))}>
               Hide all
             </button>
+            <button
+              className={`sort-btn ${scaling ? "sort-btn-active" : ""}`}
+              onClick={() => setScaling((s) => (s ? null : { base: measureWidths(), percent: 100 }))}
+              aria-expanded={Boolean(scaling)}
+            >
+              Width
+            </button>
           </div>
+          {scaling && (
+            <div className="width-slider">
+              <label htmlFor="all-widths">All column widths</label>
+              <input
+                id="all-widths"
+                type="range"
+                min="50"
+                max="200"
+                step="5"
+                value={scaling.percent}
+                onChange={(e) => scaleAll(Number(e.target.value))}
+              />
+              <span className="mono">{scaling.percent}%</span>
+            </div>
+          )}
           {columns.map((key) => (
             <label key={key} className="column-option">
               <input type="checkbox" checked={!hidden.includes(key)} onChange={() => toggle(key)} />

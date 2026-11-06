@@ -16,12 +16,16 @@ export default function useColumnLayout({ order, setOrder, setWidths }) {
 
   // The first resize switches the table to fixed widths: start every column
   // from the width it has on screen, so nothing else jumps.
-  const lockWidths = () => {
+  // Each shown column's width on screen, rounded up so text that just fits isn't cut off.
+  const measureWidths = () => {
     const measured = {};
     tableRef.current?.querySelectorAll("th[data-col]").forEach((th) => {
-      // Round up so text that just fit doesn't get cut off.
       measured[th.dataset.col] = Math.ceil(th.getBoundingClientRect().width) + 1;
     });
+    return measured;
+  };
+  const lockWidths = () => {
+    const measured = measureWidths();
     setWidths((prev) => ({ ...measured, ...prev }));
   };
 
@@ -157,5 +161,7 @@ export default function useColumnLayout({ order, setOrder, setWidths }) {
     return was;
   };
 
-  return { tableRef, wrapRef, lineRef, ghostRef, tipRef, onHeaderPointerDown, onResizeStart, onResizeFit, wasDrag };
+  return {
+    tableRef, wrapRef, lineRef, ghostRef, tipRef, onHeaderPointerDown, onResizeStart, onResizeFit, wasDrag, measureWidths,
+  };
 }
