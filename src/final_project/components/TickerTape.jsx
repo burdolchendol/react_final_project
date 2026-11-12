@@ -1,17 +1,13 @@
-import { useState, useMemo } from "react";
-import { fmt } from "../utils/analysis";
+import { useState } from "react";
+import { formatMoney } from "../utils/format";
 
-// Signature scrolling strip of live-looking prices at the top of the app.
-// Can toggle between showing all stocks or just the starred watchlist.
-export default function TickerTape({ stocks, watchlist }) {
+// Scrolling strip of last closes from the data snapshot, in the currency chosen
+// on the Screener. Change is against the previous week's close.
+// Toggles between the biggest companies and the ones starred on the Screener.
+export default function TickerTape({ all, favorites, currency = "USD", rate = 1 }) {
   const [mode, setMode] = useState("all"); // "all" | "favorites"
 
-  const favorites = useMemo(
-    () => stocks.filter((s) => watchlist.has(s.ticker)),
-    [stocks, watchlist]
-  );
-
-  const visible = mode === "favorites" ? favorites : stocks;
+  const visible = mode === "favorites" ? favorites : all;
 
   return (
     <div className="tape-wrap">
@@ -30,17 +26,27 @@ export default function TickerTape({ stocks, watchlist }) {
         </button>
       </div>
 
-      {mode === "favorites" && favorites.length === 0 ? (
-        <div className="tape-empty">No favorites yet — star a stock on Home to add it here.</div>
+      {visible.length === 0 ? (
+        <div className="tape-empty">
+          {mode === "favorites"
+            ? "No favorites yet — star a company on the Screener to add it here."
+            : "No prices yet — run npm run fetch:us to load them."}
+        </div>
       ) : (
-        <div className="tape">
+        <div className={`tape ${mode === "all" ? "tape-slow" : ""}`}>
           {[...visible, ...visible].map((s, i) => (
-            <span className="tape-item" key={i}>
+            <span
+              className="tape-item"
+              key={i}
+              title={`Close ${s.asOf}${s.changePct != null ? " · change vs the week before" : ""}`}
+            >
               <b className="tape-ticker">{s.ticker}</b>{" "}
-              <span className="mono">${fmt(s.latestClose)}</span>{" "}
-              <span className={s.changePct >= 0 ? "up" : "down"}>
-                {s.changePct >= 0 ? "▲" : "▼"} {Math.abs(s.changePct).toFixed(2)}%
-              </span>
+              <span className="mono">{formatMoney(s.last * rate, currency)}</span>{" "}
+              {s.changePct != null && (
+                <span className={s.changePct >= 0 ? "up" : "down"}>
+                  {s.changePct >= 0 ? "▲" : "▼"} {Math.abs(s.changePct).toFixed(2)}%
+                </span>
+              )}
             </span>
           ))}
         </div>

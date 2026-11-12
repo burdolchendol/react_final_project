@@ -1,4 +1,4 @@
-const NAV_ITEMS = ["Home", "Why Invest", "Graham's Analysis", "Graham's Profile","Profile", "News Feed", "Contact"];
+const NAV_ITEMS = ["Screener", "My Rules", "Why Invest", "Graham's Analysis"];
 
 export default function NavBar({ activeNav, setActiveNav }) {
   return (
